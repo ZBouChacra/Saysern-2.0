@@ -1,0 +1,23 @@
+# .NET
+bin/
+obj/
+*.user
+.vs/
+*.suo
+TestResults/
+# Node
+node_modules/
+web/dist/
+# Secrets and local config - NEVER commit these
+.env
+.env.*
+!.env.example
+appsettings.Development.json
+appsettings.Local.json
+secrets.json
+*.pfx
+dp-keys/
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
