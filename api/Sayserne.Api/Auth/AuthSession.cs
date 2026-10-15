@@ -12,6 +12,7 @@ public sealed class AuthOptions
     public int LockoutMinutes { get; set; } = 15;
     public int SessionHours { get; set; } = 8;
     public int AuthRequestsPerMinute { get; set; } = 30;
+    public int WritesPerMinute { get; set; } = 120;
 }
 
 public static class AuthSession
@@ -32,4 +33,11 @@ public static class AuthSession
 
     public static long? CurrentUserId(ClaimsPrincipal principal) =>
         long.TryParse(principal.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
+}
+
+public static class HttpContextUserExtensions
+{
+    /// <summary>The signed-in user's id. Only call from endpoints that require authorization.</summary>
+    public static long UserId(this HttpContext ctx) =>
+        AuthSession.CurrentUserId(ctx.User) ?? throw new AppException("UNAUTHENTICATED", StatusCodes.Status401Unauthorized);
 }

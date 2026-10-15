@@ -15,9 +15,8 @@ Browser ──/api──▶ ASP.NET Core API ──CALL sp_*()──▶ MySQL 8
  React/Vite (web/)
 ```
 
-> **Status: Phase 1 of 4.** This delivery contains the foundation and the **authentication + admin-user** slice, fully working end to end.
-> The marketplace features (categories, professionals, search, bookings, chat, reviews, ads, payments, site config) are **not ported yet** — see [Roadmap](#roadmap).
-> The mobile app is out of scope for this refactor.
+> **Status: Phases 1 and 2 of 4 done.** Foundation, authentication and admin users (phase 1), and the **core marketplace** (phase 2): catalog, professional profiles and listings, availability, search, booking, reviews, chat and saved searches — all working end to end through the web app.
+> Not ported yet: back-office management of the catalog, reviews, ads, premium/fees, payments, contact messages and site config (phase 3), image uploads and chat media, e-mail notifications, and the OpenAPI-generated client (phase 4). The mobile app is out of scope for this refactor.
 
 ---
 
@@ -82,7 +81,9 @@ npm install
 npm run dev           # http://localhost:5173  (proxies /api to :5080)
 ```
 
-Open <http://localhost:5173>, register an account, and sign in.
+Open <http://localhost:5173>, register an account, and sign in. A starter catalog (7 categories, 15 services) is created by migration `V004`; it is placeholder data until the back office (phase 3) can edit it.
+
+To try the marketplace: open **Profile**, set "I am a" to *professional*, add a service, then use a second browser (or private window) as a client to search, book, message and review.
 
 ### 5. Make yourself an admin
 
@@ -165,9 +166,12 @@ Enforced in four independent layers:
 ```
 db/bootstrap/B000__migration_journal.sql   journal table + its 4 procedures (idempotent, runs every time)
 db/migrations/V001__users_and_identities.sql   versioned: applied once, in numeric order
-db/migrations/R__sp_users.sql              repeatable: stored procedures, re-applied whenever the file changes
-db/migrations/R__sp_identities.sql
-db/migrations/R__sp_admin_users.sql
+db/migrations/V002__profile_fields.sql     profile columns on users
+db/migrations/V003__marketplace_tables.sql categories, services, professions, availability, appointments, reviews, chat, alerts
+db/migrations/V004__seed_catalog.sql       placeholder starter catalog
+db/migrations/R__000_views.sql             repeatable: the listing view (runs before the procedures)
+db/migrations/R__sp_*.sql                  repeatable: stored procedures, re-applied whenever the file changes
+                                           (users, identities, admin_users, catalog, professionals, booking, messaging)
 db/setup/provision.sql / deprovision.sql   database + the two accounts (templated, validated)
 ```
 
@@ -193,6 +197,8 @@ db/setup/provision.sql / deprovision.sql   database + the two accounts (template
 
 ### API summary
 
+Authentication and admin (phase 1):
+
 | Method & path | Access | Notes |
 |---|---|---|
 | `GET /api/health` | public | Calls `sp_health_ping`. |
@@ -203,7 +209,27 @@ db/setup/provision.sql / deprovision.sql   database + the two accounts (template
 | `GET /api/auth/google/callback` | public | OAuth redirect target. |
 | `POST /api/auth/google/link-pending` | pending-link cookie + password | |
 | `GET /api/admin/users?search&page&pageSize` | **admin** | |
-| `POST /api/admin/users/{id}/lock` · `/role` | **admin** | |
+| `POST /api/admin/users/{id}/lock` · `/role` · `/flags` | **admin** | `/flags` sets premium / starred (search ranking). |
+
+Marketplace (phase 2). Public unless noted; every write is rate-limited per user (`Auth:WritesPerMinute`):
+
+| Method & path | Access | Notes |
+|---|---|---|
+| `GET /api/catalog/categories` · `/services?categoryId=` | public | Active entries only. |
+| `GET /api/professionals/top?limit=` | public | |
+| `GET /api/professionals/search?…` | public | Filters: `categoryId serviceId firstName lastName sex minAge maxAge nationality country city hasOffice minStars minCost maxCost minExperience maxExperience hasTeam page pageSize`. Ranked premium → starred → rating → experience. |
+| `GET /api/professionals/{userId}` | public | Public profile + listings + availability. No email, phone or date of birth (age only). |
+| `GET /api/professionals/{userId}/busy` · `/reviews` | public | Busy times only (never who booked or why); reviews. |
+| `GET·PUT /api/me/profile` | session | Full private profile; PUT replaces the editable fields. |
+| `GET·POST /api/me/professions`, `PUT·DELETE /api/me/professions/{id}` | session | Own service listings. |
+| `GET·PUT /api/me/availability` | session | Weekly windows per listing (advisory). |
+| `POST /api/appointments`, `GET /api/appointments`, `POST /api/appointments/{id}/status` | session | Booking and the state machine below. |
+| `GET /api/reviews/eligible?professionalId=`, `POST /api/reviews` | session | Review a completed appointment, once. |
+| `GET·POST /api/chat/rooms`, `GET·POST /api/chat/rooms/{id}/messages`, `GET /api/chat/unread-count` | session | Text and location messages; membership enforced. |
+| `GET·POST /api/alerts`, `DELETE /api/alerts/{id}`, `GET /api/alerts/{id}/run` | session | Saved searches (max 20). |
+
+**Booking state machine** (enforced inside the stored procedure `sp_appointments_transition`):
+`pending → approved` (professional only) · `pending/approved → cancelled` (either party) · `approved → completed` (professional only, and only after the start time). `cancelled` and `completed` are final. Slots are serialised per professional with a row lock, so two clients can never take the same time; back-to-back bookings are allowed. All times are UTC.
 
 ---
 
@@ -216,7 +242,7 @@ All settings can be environment variables (`Section__Key`), user-secrets, or `ap
 | `ConnectionStrings:Default` | API → MySQL (the `EXECUTE`-only account). **Required**; the API refuses to start without it. | — |
 | `Google:ClientId` / `ClientSecret` / `RedirectUri` | Google sign-in | empty (feature off) |
 | `Web:AllowedOrigins` | Extra origins allowed to POST (CSRF) | `http://localhost:5173` |
-| `Auth:MaxFailedAttempts` / `LockoutMinutes` / `SessionHours` / `AuthRequestsPerMinute` / `PasswordIterations` | Security tuning | 5 / 15 / 8 / 30 / 600000 |
+| `Auth:MaxFailedAttempts` / `LockoutMinutes` / `SessionHours` / `AuthRequestsPerMinute` / `WritesPerMinute` / `PasswordIterations` | Security tuning | 5 / 15 / 8 / 30 / 120 / 600000 |
 | `Proxy:TrustForwardedHeaders` | Honour `X-Forwarded-For/Proto` | `false` |
 | `DataProtection:KeysPath` | Folder for encryption keys. Set it in production and share it across instances (framework default is per-machine and can be ephemeral in containers) | framework default |
 
@@ -252,10 +278,28 @@ CI (`.github/workflows/ci.yml`) runs both suites against a MySQL 8 service conta
 
 | Phase | Scope | Status |
 |---|---|---|
-| 1 | Database foundation, migrations, auth (form + Google), admin users, web shell | **done (this repo)** |
-| 2 | Public features: categories/services, professionals, search, profiles, availability, booking, chat, reviews, alerts | not started |
+| 1 | Database foundation, migrations, auth (form + Google), admin users, web shell | **done** |
+| 2 | Catalog, professional profiles/listings, availability, search, booking, reviews, chat, saved searches (+ their web pages) | **done** |
 | 3 | Admin features: categories, reviews, ads, premium/fees, payments, contact messages, site config | not started |
 | 4 | Web tier ported to the new API (the existing React pages), typed client generated from OpenAPI | not started |
+
+## Differences from the original app (phase 2)
+
+Reading the original code surfaced several security problems. They were **not** ported; each has a regression test.
+
+| Original behaviour | Now |
+|---|---|
+| Anyone could read or write **any chat room** by guessing its id | Membership is checked in the stored procedure; outsiders get "not found" and cannot mark messages read. |
+| Either party could set an appointment to **approved or completed** (a client could approve their own booking and complete it to unlock a review) | State machine above; clients can only cancel. |
+| A review only required *some* completed booking with that professional, and the professional came from the request | Only the appointment's own client, only after completion, once per appointment; the professional is taken from the appointment. |
+| Any signed-in user could **delete anyone's alert** | Owner-only. |
+| The public profile and search results exposed **email, phone and date of birth** | Public data excludes them (age only). |
+| A public endpoint returned full appointment rows (client ids, notes) | `busy` returns times only. |
+| Booking checked overlaps without locking, and treated back-to-back slots as clashes | Row-locked (an 80-way simultaneous-booking test yields exactly one booking; it yields double bookings without the lock); back-to-back allowed. |
+| Bookings could be made in the past, with any duration, for yourself, or for non-professionals | Rejected. |
+| Search treated `%` and `_` in text as wildcards | Escaped; searched literally. |
+
+Other deliberate changes: a service may be listed once per professional; owners **hide** a listing (`is_hidden`) while administrators **lock** it (`is_locked`), so an owner cannot undo an admin lock; a professional with live listings must hide them before switching back to a customer profile; profile edits replace all editable fields (so optional fields can be cleared); dates of birth are `yyyy-MM-dd`.
 
 ## Assumptions and decisions needing product-owner confirmation
 
@@ -266,3 +310,8 @@ CI (`.github/workflows/ci.yml`) runs both suites against a MySQL 8 service conta
 5. **Admin bootstrap is a CLI command**, not a UI flow.
 6. **OpenAPI-generated client** (planned for phase 4) is deferred; phase 1 uses a small hand-written typed client in `web/src/api.ts`.
 7. **Languages (English/Arabic), mobile app** — not part of this phase.
+8. **Availability is advisory** (shown to clients, as in the original); bookings are only blocked by existing appointments. Enforcing availability needs a per-professional time zone.
+9. **Public profile fields.** Email, phone and date of birth are no longer public. Say if phone numbers should be visible to signed-in clients.
+10. **Starter catalog** (`V004`) is placeholder data. Replace it with the real categories/services; the back office to manage them is phase 3.
+11. **Deferred:** profile/listing **image uploads** and chat **image/video** messages (needs a storage decision: object storage vs. the original's database-stored images); **e-mail/owner notifications** for new bookings and contact messages (needs a mail provider); chat uses **5-second polling**, not WebSockets.
+12. **Premium and starred** flags currently only affect search ranking and are set by admins; fees, payment batches and expiry come with phase 3.

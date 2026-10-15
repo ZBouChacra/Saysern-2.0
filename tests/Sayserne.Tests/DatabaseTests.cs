@@ -144,9 +144,9 @@ public class DatabaseTests
         {
             await new MigrationRunner(fresh.MigratorConnection, work).RunAsync();
             await File.AppendAllTextAsync(Path.Combine(work, "migrations", "R__sp_users.sql"), "\n-- touched\n");
-            await File.WriteAllTextAsync(Path.Combine(work, "migrations", "V002__add_phone.sql"), await FixtureAsync("V002__add_phone.sql"));
+            await File.WriteAllTextAsync(Path.Combine(work, "migrations", "V099__add_nickname.sql"), await FixtureAsync("V099__add_nickname.sql"));
             var result = await new MigrationRunner(fresh.MigratorConnection, work).RunAsync();
-            Assert.True(result.AppliedVersioned.Contains("V002__add_phone.sql"));
+            Assert.True(result.AppliedVersioned.Contains("V099__add_nickname.sql"));
             Assert.True(result.AppliedRepeatable.Contains("R__sp_users.sql"));
             Assert.Equal(1, result.AppliedRepeatable.Count);
         }

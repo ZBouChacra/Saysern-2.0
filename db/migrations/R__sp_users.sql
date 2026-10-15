@@ -19,7 +19,7 @@ END$$
 CREATE PROCEDURE sp_users_get_by_id(IN p_id BIGINT UNSIGNED)
 BEGIN
   SELECT id, email, email_verified, password_hash, first_name, last_name, role, profile_type,
-         is_locked, failed_login_attempts, locked_until, created_at
+         is_locked, failed_login_attempts, locked_until, created_at, is_premium, is_starred
   FROM users
   WHERE id = p_id;
 END$$
@@ -27,7 +27,7 @@ END$$
 CREATE PROCEDURE sp_users_get_by_email(IN p_email VARCHAR(255))
 BEGIN
   SELECT id, email, email_verified, password_hash, first_name, last_name, role, profile_type,
-         is_locked, failed_login_attempts, locked_until, created_at
+         is_locked, failed_login_attempts, locked_until, created_at, is_premium, is_starred
   FROM users
   WHERE email = p_email;
 END$$

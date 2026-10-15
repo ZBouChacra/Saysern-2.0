@@ -4,6 +4,7 @@ DROP PROCEDURE IF EXISTS sp_admin_users_list;
 DROP PROCEDURE IF EXISTS sp_admin_users_set_locked;
 DROP PROCEDURE IF EXISTS sp_admin_users_set_role;
 DROP PROCEDURE IF EXISTS sp_admin_users_promote_by_email;
+DROP PROCEDURE IF EXISTS sp_admin_users_set_flags;
 
 DELIMITER $$
 
@@ -22,7 +23,7 @@ BEGIN
   END IF;
 
   SELECT id, email, email_verified, password_hash, first_name, last_name, role, profile_type,
-         is_locked, failed_login_attempts, locked_until, created_at
+         is_locked, failed_login_attempts, locked_until, created_at, is_premium, is_starred
   FROM users
   WHERE v_like IS NULL OR email LIKE v_like OR first_name LIKE v_like OR last_name LIKE v_like
   ORDER BY created_at DESC, id DESC
@@ -107,6 +108,18 @@ BEGIN
   END IF;
   UPDATE users SET role = 'admin' WHERE id = v_id;
   CALL sp_users_get_by_id(v_id);
+END$$
+
+-- Premium / starred listing flags (affect search ranking).
+CREATE PROCEDURE sp_admin_users_set_flags(IN p_user_id BIGINT UNSIGNED, IN p_is_premium TINYINT(1), IN p_is_starred TINYINT(1))
+BEGIN
+  DECLARE v_id BIGINT UNSIGNED;
+  SELECT id INTO v_id FROM users WHERE id = p_user_id;
+  IF v_id IS NULL THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'USER_NOT_FOUND';
+  END IF;
+  UPDATE users SET is_premium = p_is_premium, is_starred = p_is_starred WHERE id = p_user_id;
+  CALL sp_users_get_by_id(p_user_id);
 END$$
 
 DELIMITER ;

@@ -70,7 +70,11 @@ public sealed class TestDatabase
         return db;
     }
 
-    public Task DropAsync() => Provisioner.DeprovisionAsync(TestEnv.AdminConnection, TestEnv.DbDir, Options);
+    public async Task DropAsync()
+    {
+        lock (_dataSourceLock) { _dataSource?.Dispose(); _dataSource = null; }
+        await Provisioner.DeprovisionAsync(TestEnv.AdminConnection, TestEnv.DbDir, Options);
+    }
 
     /// <summary>Promotes a user to admin through the same stored procedure the migrator CLI uses.</summary>
     public async Task PromoteToAdminAsync(string email)
@@ -82,7 +86,23 @@ public sealed class TestDatabase
         await cmd.ExecuteNonQueryAsync();
     }
 
-    public StoredProcedureExecutor Executor() => new(new MySqlDataSource(AppConnection));
+    /// <summary>Moves an appointment into the past (the API refuses to create past bookings), so completion can be tested.</summary>
+    public async Task BackdateAppointmentAsync(long appointmentId)
+    {
+        var sql = (await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "fixtures", "backdate_appointment.sql"))).Replace("{{ID}}", appointmentId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        await using var conn = new MySqlConnection(MigratorConnection);
+        await conn.OpenAsync();
+        await ScriptRunner.ExecuteAsync(conn, sql, default);
+    }
+
+    private MySqlDataSource? _dataSource;
+    private readonly object _dataSourceLock = new();
+    /// <summary>One shared connection pool per test database (creating a pool per call exhausts MySQL's connection limit).</summary>
+    public StoredProcedureExecutor Executor()
+    {
+        lock (_dataSourceLock) _dataSource ??= new MySqlDataSource(AppConnection);
+        return new StoredProcedureExecutor(_dataSource);
+    }
 }
 
 public sealed class ManualClock(DateTimeOffset? start = null) : TimeProvider
@@ -109,6 +129,18 @@ public sealed class TestClient
     public async Task<(HttpStatusCode Status, JsonElement Body)> PostAsync(string path, object? body = null)
     {
         using var response = await Http.PostAsJsonAsync(path, body ?? new { });
+        return await ReadAsync(response);
+    }
+
+    public async Task<(HttpStatusCode Status, JsonElement Body)> PutAsync(string path, object? body = null)
+    {
+        using var response = await Http.PutAsJsonAsync(path, body ?? new { });
+        return await ReadAsync(response);
+    }
+
+    public async Task<(HttpStatusCode Status, JsonElement Body)> DeleteAsync(string path)
+    {
+        using var response = await Http.DeleteAsync(path);
         return await ReadAsync(response);
     }
 
@@ -186,6 +218,57 @@ public sealed class ApiHost : IAsyncDisposable
         Assert.Equal(HttpStatusCode.Created, status);
         return (client, email, body.GetProperty("user").GetProperty("id").GetInt64());
     }
+
+    private static int _slot;
+    /// <summary>A unique future instant (so tests never collide on the same professional's calendar).</summary>
+    public static DateTimeOffset FutureSlot(int hour = 10) =>
+        new(DateTime.UtcNow.Date.AddDays(30 + Interlocked.Increment(ref _slot)).AddHours(hour), TimeSpan.Zero);
+
+    public static object ProfileBody(string first = "Pat", string last = "Pro", string type = "professional", string? city = null, string? country = null,
+        string? sex = null, string? dob = null, string? nationality = null, string? phone = null, string? bio = null) =>
+        new { firstName = first, lastName = last, profileType = type, city, country, sex, dateOfBirth = dob, nationality, phone, bio, preferredLanguage = "en" };
+
+    public async Task<(TestClient Client, string Email, long Id)> RegisterProfessionalAsync(string first = "Pat", string last = "Pro", string? city = null,
+        string? country = null, string? sex = null, string? dob = null, string? nationality = null)
+    {
+        var (c, email, id) = await RegisterAsync();
+        var (status, body) = await c.PutAsync("/api/me/profile", ProfileBody(first, last, "professional", city, country, sex, dob, nationality));
+        Assert.Equal(HttpStatusCode.OK, status);
+        return (c, email, id);
+    }
+
+    public async Task<(long CategoryId, long ServiceId)> ServiceAsync(string name = "Corporate Law")
+    {
+        var (_, services) = await NewClient().GetAsync("/api/catalog/services");
+        foreach (var s in services.EnumerateArray())
+            if (s.GetProperty("name").GetString() == name) return (s.GetProperty("categoryId").GetInt64(), s.GetProperty("id").GetInt64());
+        throw new InvalidOperationException($"seed service '{name}' not found");
+    }
+
+    public async Task<long> AddProfessionAsync(TestClient pro, string serviceName = "Corporate Law", Dictionary<string, object?>? extra = null)
+    {
+        var (categoryId, serviceId) = await ServiceAsync(serviceName);
+        var body = new Dictionary<string, object?> { ["categoryId"] = categoryId, ["serviceId"] = serviceId, ["costPerHour"] = 50, ["yearsOfExperience"] = 5 };
+        if (extra != null) foreach (var (k, v) in extra) body[k] = v;
+        var (status, created) = await pro.PostAsync("/api/me/professions", body);
+        Assert.Equal(HttpStatusCode.Created, status);
+        return created.GetProperty("id").GetInt64();
+    }
+
+    /// <summary>Client books, professional approves, appointment is moved into the past, professional completes it.</summary>
+    public async Task<long> CompletedAppointmentAsync(TestClient client, TestClient pro, long proId, long? professionId = null)
+    {
+        var (s1, booked) = await client.PostAsync("/api/appointments", new { professionalId = proId, professionId, startsAt = FutureSlot(), durationMinutes = 60 });
+        Assert.Equal(HttpStatusCode.Created, s1);
+        var id = booked.GetProperty("id").GetInt64();
+        Assert.Equal(HttpStatusCode.OK, (await pro.PostAsync($"/api/appointments/{id}/status", new { status = "approved" })).Status);
+        await (await TestEnv.GetDatabaseAsync()).BackdateAppointmentAsync(id);
+        Assert.Equal(HttpStatusCode.OK, (await pro.PostAsync($"/api/appointments/{id}/status", new { status = "completed" })).Status);
+        return id;
+    }
+
+    public static string? Str(JsonElement e, string name) => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+    public static bool Has(JsonElement e, string name) => e.ValueKind == JsonValueKind.Object && e.TryGetProperty(name, out var v) && v.ValueKind != JsonValueKind.Null;
 
     /// <summary>Registers a user, promotes it to admin, and signs in again so the session carries the admin role.</summary>
     public async Task<(TestClient Client, string Email, long Id)> CreateAdminAsync()

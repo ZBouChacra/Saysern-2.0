@@ -1,5 +1,6 @@
 using Sayserne.Api.Auth;
 using Sayserne.Api.Data;
+using Sayserne.Api.Infrastructure;
 
 namespace Sayserne.Api.Endpoints;
 
@@ -25,6 +26,9 @@ public static class AdminEndpoints
             if (AuthSession.CurrentUserId(ctx.User) == id) throw new AppException("CANNOT_MODIFY_SELF", 400);
             return Results.Ok(new { user = (await admin.SetLockedAsync(id, body.IsLocked)).ToDto() });
         });
+
+        g.MapPost("/users/{id:long}/flags", async (long id, FlagsInput body, IAdminUserRepository admin) =>
+            Results.Ok(new { user = (await admin.SetFlagsAsync(id, body.IsPremium, body.IsStarred)).ToDto() }));
 
         g.MapPost("/users/{id:long}/role", async (HttpContext ctx, long id, SetRoleRequest body, IAdminUserRepository admin) =>
         {

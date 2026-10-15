@@ -36,6 +36,10 @@ namespace Sayserne.Api
             builder.Services.AddSingleton<IUserRepository, UserRepository>();
             builder.Services.AddSingleton<IIdentityRepository, IdentityRepository>();
             builder.Services.AddSingleton<IAdminUserRepository, AdminUserRepository>();
+            builder.Services.AddSingleton<ICatalogRepository, CatalogRepository>();
+            builder.Services.AddSingleton<IProfessionalRepository, ProfessionalRepository>();
+            builder.Services.AddSingleton<IBookingRepository, BookingRepository>();
+            builder.Services.AddSingleton<IMessagingRepository, MessagingRepository>();
 
             builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection("Auth"));
             builder.Services.Configure<GoogleOptions>(builder.Configuration.GetSection("Google"));
@@ -85,6 +89,10 @@ namespace Sayserne.Api
                 o.AddPolicy("auth", ctx => RateLimitPartition.GetFixedWindowLimiter(
                     ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                     _ => new FixedWindowRateLimiterOptions { PermitLimit = auth.AuthRequestsPerMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+                // writes (profile edits, bookings, chat messages, alerts): limited per signed-in user, falling back to the client IP
+                o.AddPolicy(MarketplaceEndpoints.WriteLimiter, ctx => RateLimitPartition.GetFixedWindowLimiter(
+                    AuthSession.CurrentUserId(ctx.User)?.ToString() ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    _ => new FixedWindowRateLimiterOptions { PermitLimit = auth.WritesPerMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
             });
 
             builder.Services.ConfigureHttpJsonOptions(o =>
@@ -110,6 +118,7 @@ namespace Sayserne.Api
             app.MapAuth();
             app.MapGoogle();
             app.MapAdmin();
+            app.MapMarketplace();
             return app;
         }
     }

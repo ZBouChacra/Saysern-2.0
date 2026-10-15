@@ -39,7 +39,7 @@ export default function Admin() {
         <>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Created</th><th /></tr></thead>
+              <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Listing</th><th>Created</th><th /></tr></thead>
               <tbody>
                 {data.items.map(u => (
                   <tr key={u.id}>
@@ -47,18 +47,21 @@ export default function Admin() {
                     <td>{u.email}</td>
                     <td><span className={`pill ${u.role === "admin" ? "ok" : ""}`}>{u.role}</span></td>
                     <td>{u.isLocked ? <span className="pill bad">locked</span> : "active"}</td>
+                    <td>{u.isPremium && <span className="pill ok">premium</span>} {u.isStarred && <span className="pill">★</span>}</td>
                     <td>{new Date(u.createdAtUtc).toLocaleDateString()}</td>
                     <td className="actions">
                       {u.id === me?.id ? <span className="muted">you</span> : (
                         <>
                           <button className="btn small secondary" disabled={busyId === u.id} onClick={() => act(u.id, () => api.setLocked(u.id, !u.isLocked))}>{u.isLocked ? "Unlock" : "Lock"}</button>
+                          <button className="btn small secondary" disabled={busyId === u.id} onClick={() => act(u.id, () => api.setFlags(u.id, !u.isPremium, u.isStarred))}>{u.isPremium ? "Unpremium" : "Premium"}</button>
+                          <button className="btn small secondary" disabled={busyId === u.id} onClick={() => act(u.id, () => api.setFlags(u.id, u.isPremium, !u.isStarred))}>{u.isStarred ? "Unstar" : "Star"}</button>
                           <button className="btn small secondary" disabled={busyId === u.id} onClick={() => act(u.id, () => api.setRole(u.id, (u.role === "admin" ? "user" : "admin") as Role))}>{u.role === "admin" ? "Make user" : "Make admin"}</button>
                         </>
                       )}
                     </td>
                   </tr>
                 ))}
-                {data.items.length === 0 && <tr><td colSpan={6} className="muted">No users found.</td></tr>}
+                {data.items.length === 0 && <tr><td colSpan={7} className="muted">No users found.</td></tr>}
               </tbody>
             </table>
           </div>
