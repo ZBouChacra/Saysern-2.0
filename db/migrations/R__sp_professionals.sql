@@ -49,6 +49,19 @@ BEGIN
   IF v_id IS NULL THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'USER_NOT_FOUND';
   END IF;
+  -- values must exist (and be active) in the lookups an admin maintains
+  IF p_sex IS NOT NULL AND NOT EXISTS (SELECT 1 FROM lookup_values WHERE type_code = 'sex' AND code = p_sex AND is_active = 1) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'INVALID_SEX';
+  END IF;
+  IF p_nationality IS NOT NULL AND NOT EXISTS (SELECT 1 FROM lookup_values WHERE type_code = 'nationality' AND code = p_nationality AND is_active = 1) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'INVALID_NATIONALITY';
+  END IF;
+  IF p_country IS NOT NULL AND NOT EXISTS (SELECT 1 FROM lookup_values WHERE type_code = 'country' AND code = p_country AND is_active = 1) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'INVALID_COUNTRY';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM lookup_values WHERE type_code = 'language' AND code = p_preferred_language AND is_active = 1) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'INVALID_LANGUAGE';
+  END IF;
   -- switching back to customer would orphan live listings; hide them first
   IF v_current = 'professional' AND p_profile_type = 'customer' THEN
     SELECT COUNT(*) INTO v_professions FROM professions WHERE user_id = p_user_id AND is_hidden = 0;
@@ -86,6 +99,10 @@ BEGIN
   DECLARE EXIT HANDLER FOR 1062
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'DUPLICATE_PROFESSION';
 
+  IF (p_country IS NOT NULL AND NOT EXISTS (SELECT 1 FROM lookup_values WHERE type_code = 'country' AND code = p_country AND is_active = 1))
+     OR (p_office_country IS NOT NULL AND NOT EXISTS (SELECT 1 FROM lookup_values WHERE type_code = 'country' AND code = p_office_country AND is_active = 1)) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'INVALID_COUNTRY';
+  END IF;
   SELECT profile_type INTO v_type FROM users WHERE id = p_user_id AND is_locked = 0;
   IF v_type IS NULL OR v_type <> 'professional' THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'NOT_A_PROFESSIONAL';
@@ -115,6 +132,10 @@ BEGIN
   SELECT id INTO v_id FROM professions WHERE id = p_id AND user_id = p_user_id;
   IF v_id IS NULL THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'PROFESSION_NOT_FOUND';
+  END IF;
+  IF (p_country IS NOT NULL AND NOT EXISTS (SELECT 1 FROM lookup_values WHERE type_code = 'country' AND code = p_country AND is_active = 1))
+     OR (p_office_country IS NOT NULL AND NOT EXISTS (SELECT 1 FROM lookup_values WHERE type_code = 'country' AND code = p_office_country AND is_active = 1)) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'INVALID_COUNTRY';
   END IF;
   UPDATE professions
      SET country = p_country, city = p_city, cost_per_hour = p_cost_per_hour, years_of_experience = p_years,
@@ -210,7 +231,7 @@ BEGIN
   DECLARE v_last VARCHAR(220);
   DECLARE v_city VARCHAR(220);
 
-  SET v_size = LEAST(GREATEST(IFNULL(p_page_size, 20), 1), 50);
+  SET v_size = LEAST(GREATEST(IFNULL(p_page_size, (SELECT CAST(value_text AS SIGNED) FROM app_settings WHERE setting_key = 'Search.DefaultPageSize')), 1), (SELECT CAST(value_text AS SIGNED) FROM app_settings WHERE setting_key = 'Search.MaxPageSize'));
   SET v_offset = (GREATEST(IFNULL(p_page, 1), 1) - 1) * v_size;
   SET v_first = IF(p_first_name IS NULL OR CHAR_LENGTH(TRIM(p_first_name)) = 0, NULL,
                    CONCAT('%', REPLACE(REPLACE(REPLACE(TRIM(p_first_name), '|', '||'), '%', '|%'), '_', '|_'), '%'));

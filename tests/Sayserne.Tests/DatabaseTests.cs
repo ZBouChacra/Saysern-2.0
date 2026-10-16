@@ -2,6 +2,7 @@ using System.Data;
 using MySqlConnector;
 using Sayserne.Api;
 using Sayserne.Api.Data;
+using Sayserne.Api.Platform;
 using Sayserne.Migrator;
 
 namespace Sayserne.Tests;
@@ -44,9 +45,9 @@ public class DatabaseTests
     {
         var db = await TestEnv.GetDatabaseAsync();
         var admin = new AdminUserRepository(db.Executor());
-        var e1 = await Assert.ThrowsAsync<AppException>(() => admin.SetRoleAsync(1, "overlord"));
+        var e1 = await Assert.ThrowsAsync<AppException>(() => admin.SetRoleAsync(1, 1, "overlord"));
         Assert.Equal("INVALID_ROLE", e1.Code);
-        var e2 = await Assert.ThrowsAsync<AppException>(() => admin.SetLockedAsync(long.MaxValue / 2, true));
+        var e2 = await Assert.ThrowsAsync<AppException>(() => admin.SetLockedAsync(1, long.MaxValue / 2, true));
         Assert.Equal("USER_NOT_FOUND", e2.Code);
         Assert.Equal(404, e2.Status);
     }
@@ -180,13 +181,13 @@ public class DatabaseTests
             var b = await users.CreateLocalAsync("b@example.test", "hash", "B", "B");
             await fresh.PromoteToAdminAsync(a.Email);
 
-            Assert.Equal("LAST_ADMIN", (await Assert.ThrowsAsync<AppException>(() => admin.SetRoleAsync(a.Id, "user"))).Code);
-            Assert.Equal("LAST_ADMIN", (await Assert.ThrowsAsync<AppException>(() => admin.SetLockedAsync(a.Id, true))).Code);
+            Assert.Equal("LAST_ADMIN", (await Assert.ThrowsAsync<AppException>(() => admin.SetRoleAsync(a.Id, a.Id, "user"))).Code);
+            Assert.Equal("LAST_ADMIN", (await Assert.ThrowsAsync<AppException>(() => admin.SetLockedAsync(a.Id, a.Id, true))).Code);
 
-            await admin.SetRoleAsync(b.Id, "admin");                 // a second admin exists now
-            var demoted = await admin.SetRoleAsync(a.Id, "user");    // so demoting the first one is fine
+            await admin.SetRoleAsync(a.Id, b.Id, "admin");                 // a second admin exists now
+            var demoted = await admin.SetRoleAsync(b.Id, a.Id, "user");    // so demoting the first one is fine
             Assert.Equal("user", demoted.Role);
-            Assert.Equal("LAST_ADMIN", (await Assert.ThrowsAsync<AppException>(() => admin.SetRoleAsync(b.Id, "user"))).Code);
+            Assert.Equal("LAST_ADMIN", (await Assert.ThrowsAsync<AppException>(() => admin.SetRoleAsync(a.Id, b.Id, "user"))).Code);
         }
         finally { await fresh.DropAsync(); }
     }
@@ -197,6 +198,80 @@ public class DatabaseTests
         var db = await TestEnv.GetDatabaseAsync();
         var ex = await Assert.ThrowsAsync<MySqlException>(() => db.PromoteToAdminAsync(ApiHost.UniqueEmail("ghost")));
         Assert.Equal("USER_NOT_FOUND", ex.Message);
+    }
+
+    // ---- one-time codes: the database is the final guard against replay, including races ----
+
+    private static async Task<(TwoFactorRepository Repo, long UserId)> EnrolledAdminAsync(TestDatabase db)
+    {
+        var users = new UserRepository(db.Executor());
+        var u = await users.CreateLocalAsync(ApiHost.UniqueEmail("tf"), "hash", "T", "F");
+        var repo = new TwoFactorRepository(db.Executor());
+        await repo.BeginAsync(u.Id, "protected-secret");
+        await repo.ConfirmAsync(u.Id, 1000, ["a".PadRight(64, 'a')]);
+        return (repo, u.Id);
+    }
+
+    [Fact]
+    public async Task A_used_time_step_is_refused_by_the_database_even_if_the_caller_forgot_to_check()
+    {
+        var db = await TestEnv.GetDatabaseAsync();
+        var (repo, userId) = await EnrolledAdminAsync(db);
+        Assert.Equal("TOTP_REPLAY", (await Assert.ThrowsAsync<AppException>(() => repo.UseStepAsync(userId, 1000))).Code);   // the step used at enrollment
+        Assert.Equal("TOTP_REPLAY", (await Assert.ThrowsAsync<AppException>(() => repo.UseStepAsync(userId, 999))).Code);    // older steps too
+        await repo.UseStepAsync(userId, 1001);
+        Assert.Equal("TOTP_REPLAY", (await Assert.ThrowsAsync<AppException>(() => repo.UseStepAsync(userId, 1001))).Code);
+    }
+
+    [Fact]
+    public async Task Twenty_simultaneous_uses_of_the_same_code_succeed_exactly_once()
+    {
+        var db = await TestEnv.GetDatabaseAsync();
+        var (repo, userId) = await EnrolledAdminAsync(db);
+        var gate = new TaskCompletionSource();
+        var calls = Enumerable.Range(0, 20).Select(_ => Task.Run(async () =>
+        {
+            await gate.Task;
+            try { await repo.UseStepAsync(userId, 2000); return true; }
+            catch (AppException e) when (e.Code == "TOTP_REPLAY") { return false; }
+        })).ToList();
+        await Task.Delay(100);
+        gate.SetResult();
+        Assert.Equal(1, (await Task.WhenAll(calls)).Count(ok => ok));
+    }
+
+    [Fact]
+    public async Task A_recovery_code_can_be_spent_only_once_even_under_a_race()
+    {
+        var db = await TestEnv.GetDatabaseAsync();
+        var (repo, userId) = await EnrolledAdminAsync(db);
+        var hash = "a".PadRight(64, 'a');
+        var gate = new TaskCompletionSource();
+        var calls = Enumerable.Range(0, 20).Select(_ => Task.Run(async () =>
+        {
+            await gate.Task;
+            try { await repo.UseRecoveryAsync(userId, hash); return true; }
+            catch (AppException e) when (e.Code == "INVALID_RECOVERY_CODE") { return false; }
+        })).ToList();
+        await Task.Delay(100);
+        gate.SetResult();
+        Assert.Equal(1, (await Task.WhenAll(calls)).Count(ok => ok));
+        Assert.Equal(0, await repo.RecoveryCountAsync(userId));
+    }
+
+    [Fact]
+    public async Task The_break_glass_procedure_clears_two_factor_and_audits_it_without_an_acting_user()
+    {
+        var db = await TestEnv.GetDatabaseAsync();
+        var (repo, userId) = await EnrolledAdminAsync(db);
+        var users = new UserRepository(db.Executor());
+        var email = (await users.GetByIdAsync(userId))!.Email;
+        await db.Executor().ExecuteAsync("sp_twofactor_reset_by_email", new ProcParams().Add("p_email", email));
+        Assert.Null(await repo.GetAsync(userId));
+        Assert.Equal(0, await repo.RecoveryCountAsync(userId));
+        var audit = await new PlatformRepository(db.Executor()).AuditAsync(new AuditFilter(null, null, null, "admin.2fa.reset", "user", userId.ToString(), 1, 5));
+        Assert.True(audit.Items.Any(a => a.ActorId is null));
+        Assert.Equal("USER_NOT_FOUND", (await Assert.ThrowsAsync<AppException>(() => db.Executor().ExecuteAsync("sp_twofactor_reset_by_email", new ProcParams().Add("p_email", "nobody@example.test")))).Code);
     }
 
     private static string CopyDbDir()

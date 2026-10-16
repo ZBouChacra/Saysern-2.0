@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Options;
 using Sayserne.Api.Auth;
 using Sayserne.Api.Data;
+using Sayserne.Api.Platform;
 
 namespace Sayserne.Api.Endpoints;
 
@@ -162,7 +163,7 @@ public static class GoogleEndpoints
 
     private static async Task<IResult> LinkPending(
         HttpContext ctx, LinkPendingRequest request, ProtectedCookies cookies, IUserRepository users,
-        IIdentityRepository identities, IPasswordHasher hasher, IOptions<AuthOptions> authOptions, TimeProvider clock)
+        IIdentityRepository identities, IPasswordHasher hasher, ISettingsService settings, TimeProvider clock)
     {
         var pending = cookies.Read<PendingLink>(ctx, PendingCookie) ?? throw new AppException("LINK_EXPIRED", 400);
         var user = await users.GetByIdAsync(pending.UserId) ?? throw new AppException("LINK_EXPIRED", 400);
@@ -172,7 +173,7 @@ public static class GoogleEndpoints
         var password = request.Password ?? string.Empty;
         if (password.Length == 0 || password.Length > 1024 || !hasher.Verify(password, user.PasswordHash))
         {
-            await users.RecordLoginFailureAsync(user.Id, authOptions.Value.MaxFailedAttempts, authOptions.Value.LockoutMinutes);
+            await users.RecordLoginFailureAsync(user.Id, settings.GetInt("Auth.MaxFailedAttempts"), settings.GetInt("Auth.LockoutMinutes"));
             throw new AppException("INVALID_CREDENTIALS");
         }
 

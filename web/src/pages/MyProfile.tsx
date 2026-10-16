@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { ApiError, api, errorMessage, type Category, type PrivateProfile, type Profession, type ProfessionInput, type Service, type Slot } from "../api";
-import { DAYS } from "../components";
+import { CityInput, LookupSelect, useWeekdays } from "../components";
+import { useConfig } from "../config";
 
 const blankToUndef = (v: string | undefined) => (v === undefined || v.trim() === "" ? undefined : v.trim());
 
@@ -38,6 +39,7 @@ export default function MyProfile() {
 }
 
 function ProfileForm({ profile, onSaved }: { profile: PrivateProfile; onSaved: (p: PrivateProfile) => void }) {
+  const maxBio = useConfig().num("Profile.MaxBioLength");
   const [f, setF] = useState({ ...profile });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
@@ -72,11 +74,14 @@ function ProfileForm({ profile, onSaved }: { profile: PrivateProfile; onSaved: (
       <div className="grid2">{text("firstName", "First name")}{text("lastName", "Last name")}</div>
       <div className="grid2">{text("phone", "Phone")}{text("dateOfBirth", "Date of birth", "date")}</div>
       <div className="grid2">
-        <label>Sex<select value={f.sex ?? ""} onChange={e => set({ sex: e.target.value || undefined })}><option value="">—</option><option value="female">Female</option><option value="male">Male</option></select></label>
-        {text("nationality", "Nationality")}
+        <label>Sex<LookupSelect type="sex" value={f.sex} onChange={v => set({ sex: v })} /></label>
+        <label>Nationality<LookupSelect type="nationality" value={f.nationality} onChange={v => set({ nationality: v })} /></label>
       </div>
-      <div className="grid2">{text("country", "Country")}{text("city", "City")}</div>
-      <label>About you<textarea rows={3} value={f.bio ?? ""} onChange={e => set({ bio: e.target.value })} maxLength={2000} /></label>
+      <div className="grid2">
+        <label>Country<LookupSelect type="country" value={f.country} onChange={v => set({ country: v })} /></label>
+        <CityInput country={f.country} value={f.city ?? ""} onChange={v => set({ city: v })} />
+      </div>
+      <label>About you<textarea rows={3} value={f.bio ?? ""} onChange={e => set({ bio: e.target.value })} maxLength={maxBio} /></label>
       <div className="grid2">
         <label>I am a
           <select value={f.profileType} onChange={e => set({ profileType: e.target.value as PrivateProfile["profileType"] })}>
@@ -96,6 +101,7 @@ function ProfessionEditor({ p, slots, onChanged }: { p: Profession; slots: Slot[
     city: p.city ?? "", costPerHour: p.costPerHour?.toString() ?? "", yearsOfExperience: p.yearsOfExperience.toString(), website: p.website ?? "",
     hasTeam: p.hasTeam, teamSize: p.teamSize.toString(), hasOffice: p.hasOffice, officeAddress: p.officeAddress ?? "", areas: p.geographicAreas.join(", "), isHidden: p.isHidden,
   });
+  const weekdays = useWeekdays();
   const [rows, setRows] = useState<Slot[]>(slots);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -137,7 +143,7 @@ function ProfessionEditor({ p, slots, onChanged }: { p: Profession; slots: Slot[
       <h4>Weekly availability</h4>
       {rows.map((r, i) => (
         <div className="row" key={i}>
-          <select aria-label="Day" value={r.dayOfWeek} onChange={e => setRow(i, { dayOfWeek: Number(e.target.value) })}>{DAYS.map((d, n) => <option key={d} value={n}>{d}</option>)}</select>
+          <select aria-label="Day" value={r.dayOfWeek} onChange={e => setRow(i, { dayOfWeek: Number(e.target.value) })}>{weekdays.days.map(d => <option key={d.code} value={Number(d.code)}>{weekdays.dayName(Number(d.code))}</option>)}</select>
           <input type="time" aria-label="From" value={r.startTime} onChange={e => setRow(i, { startTime: e.target.value })} />
           <input type="time" aria-label="To" value={r.endTime} onChange={e => setRow(i, { endTime: e.target.value })} />
           <button type="button" className="btn small secondary" onClick={() => setRows(rows.filter((_, k) => k !== i))}>Remove</button>

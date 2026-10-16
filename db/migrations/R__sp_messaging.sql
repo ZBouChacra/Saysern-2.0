@@ -84,7 +84,7 @@ BEGIN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'ROOM_NOT_FOUND';
   END IF;
   IF p_type = 'text' THEN
-    IF p_content IS NULL OR CHAR_LENGTH(TRIM(p_content)) = 0 OR CHAR_LENGTH(p_content) > 4000 THEN
+    IF p_content IS NULL OR CHAR_LENGTH(TRIM(p_content)) = 0 OR CHAR_LENGTH(p_content) > (SELECT CAST(value_text AS SIGNED) FROM app_settings WHERE setting_key = 'Chat.MaxMessageLength') THEN
       SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'INVALID_MESSAGE';
     END IF;
   ELSEIF p_type = 'location' THEN
@@ -116,12 +116,15 @@ BEGIN
 END$$
 
 -- Saved searches (p_criteria is the validated search filter object as JSON). At most 20 per user.
-CREATE PROCEDURE sp_alerts_create(IN p_user_id BIGINT UNSIGNED, IN p_name VARCHAR(100), IN p_criteria JSON, IN p_frequency VARCHAR(10))
+CREATE PROCEDURE sp_alerts_create(IN p_user_id BIGINT UNSIGNED, IN p_name VARCHAR(100), IN p_criteria JSON, IN p_frequency VARCHAR(20))
 BEGIN
   DECLARE v_count INT;
   DECLARE v_id BIGINT UNSIGNED;
+  IF NOT EXISTS (SELECT 1 FROM lookup_values WHERE type_code = 'alert_frequency' AND code = p_frequency AND is_active = 1) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'INVALID_FREQUENCY';
+  END IF;
   SELECT COUNT(*) INTO v_count FROM alerts WHERE user_id = p_user_id;
-  IF v_count >= 20 THEN
+  IF v_count >= (SELECT CAST(value_text AS SIGNED) FROM app_settings WHERE setting_key = 'Alerts.MaxPerUser') THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'ALERT_LIMIT';
   END IF;
   INSERT INTO alerts (user_id, name, search_criteria, frequency) VALUES (p_user_id, p_name, p_criteria, p_frequency);

@@ -2,12 +2,15 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError, api, errorMessage } from "../api";
 import { useAuth } from "../auth";
+import { useConfig } from "../config";
 import { validateRegistration } from "../validation";
 import GoogleButton from "./GoogleButton";
 
 export default function Register() {
   const { setUser } = useAuth();
   const navigate = useNavigate();
+  const cfg = useConfig();
+  const rules = { minLength: cfg.num("Auth.PasswordMinLength"), requireLetter: cfg.bool("Auth.PasswordRequireLetter"), requireDigit: cfg.bool("Auth.PasswordRequireDigit") };
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", password: "" });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -17,7 +20,7 @@ export default function Register() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    const local = validateRegistration(form);
+    const local = validateRegistration(form, rules);
     setFieldErrors(local);
     if (Object.keys(local).length > 0) return;
     setBusy(true);
@@ -46,7 +49,7 @@ export default function Register() {
         <div className="grid2">{field("firstName", "First name", "text", "given-name")}{field("lastName", "Last name", "text", "family-name")}</div>
         {field("email", "Email", "email", "email")}
         {field("password", "Password", "password", "new-password")}
-        <p className="hint">At least 10 characters, with a letter and a digit.</p>
+        <p className="hint">At least {rules.minLength} characters{rules.requireLetter && rules.requireDigit ? ", with a letter and a digit" : rules.requireLetter ? ", with a letter" : rules.requireDigit ? ", with a digit" : ""}.</p>
         {error && <p className="error" role="alert">{error}</p>}
         <button className="btn" disabled={busy}>{busy ? "Creating…" : "Create account"}</button>
       </form>

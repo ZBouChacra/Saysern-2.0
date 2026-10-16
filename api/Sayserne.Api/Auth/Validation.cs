@@ -1,5 +1,7 @@
 using System.Text.RegularExpressions;
 
+using Sayserne.Api.Platform;
+
 namespace Sayserne.Api.Auth;
 
 public sealed record RegisterRequest(string? Email, string? Password, string? FirstName, string? LastName);
@@ -16,16 +18,18 @@ public static partial class InputValidation
         normalizedEmail.Length is > 0 and <= 254 && EmailPattern().IsMatch(normalizedEmail);
 
     /// <summary>Returns field -> message; empty when the request is valid.</summary>
-    public static Dictionary<string, string> ValidateRegistration(RegisterRequest r)
+    public static Dictionary<string, string> ValidateRegistration(RegisterRequest r, ISettingsService settings)
     {
         var errors = new Dictionary<string, string>();
         var email = NormalizeEmail(r.Email);
         if (!IsValidEmail(email)) errors["email"] = "Enter a valid email address.";
 
         var password = r.Password ?? string.Empty;
-        if (password.Length < 10) errors["password"] = "Use at least 10 characters.";
+        var minLength = settings.GetInt("Auth.PasswordMinLength");
+        if (password.Length < minLength) errors["password"] = $"Use at least {minLength} characters.";
         else if (password.Length > 128) errors["password"] = "Use at most 128 characters.";
-        else if (!password.Any(char.IsLetter) || !password.Any(char.IsDigit)) errors["password"] = "Include at least one letter and one digit.";
+        else if (settings.GetBool("Auth.PasswordRequireLetter") && !password.Any(char.IsLetter)) errors["password"] = "Include at least one letter.";
+        else if (settings.GetBool("Auth.PasswordRequireDigit") && !password.Any(char.IsDigit)) errors["password"] = "Include at least one digit.";
         else if (string.Equals(password, email, StringComparison.OrdinalIgnoreCase)) errors["password"] = "The password must not be your email address.";
 
         foreach (var (field, value) in new[] { ("firstName", r.FirstName), ("lastName", r.LastName) })

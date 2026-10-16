@@ -1,3 +1,5 @@
+// eslint-disable-next-line
+import { GENERIC_ERROR, NETWORK_ERROR, getText } from "./texts";
 // Typed client for the ASP.NET Core API. The browser never talks to the database or to Google directly.
 
 export type Role = "user" | "admin";
@@ -110,7 +112,7 @@ export interface ChatRoomSummary {
   lastMessageContent?: string; lastMessageSenderId?: number; unreadCount: number;
 }
 export interface ChatMessage { id: number; roomId: number; senderId: number; messageType: "text" | "location"; content?: string; latitude?: number; longitude?: number; isRead: boolean; createdAt: string }
-export interface Alert { id: number; name: string; searchCriteria: SearchFilters; frequency: "daily" | "weekly" | "monthly"; createdAt: string }
+export interface Alert { id: number; name: string; searchCriteria: SearchFilters; frequency: string; createdAt: string }
 
 /** Query string for the search API and the search page URL; empty values are skipped. */
 export function toQuery(filters: SearchFilters): string {
@@ -146,10 +148,6 @@ export const api = {
   login: (email: string, password: string) => request<{ user: User }>("POST", "/auth/login", { email, password }).then(r => r.user),
   logout: () => request<void>("POST", "/auth/logout"),
   linkPending: (password: string) => request<{ user: User }>("POST", "/auth/google/link-pending", { password }).then(r => r.user),
-  adminUsers: (search: string, page: number, pageSize = 20) =>
-    request<Paged<User>>("GET", `/admin/users?search=${encodeURIComponent(search)}&page=${page}&pageSize=${pageSize}`),
-  setLocked: (id: number, isLocked: boolean) => request<{ user: User }>("POST", `/admin/users/${id}/lock`, { isLocked }).then(r => r.user),
-  setRole: (id: number, role: Role) => request<{ user: User }>("POST", `/admin/users/${id}/role`, { role }).then(r => r.user),
   categories: () => request<Category[]>("GET", "/catalog/categories"),
   services: (categoryId?: number) => request<Service[]>("GET", `/catalog/services${categoryId ? `?categoryId=${categoryId}` : ""}`),
   topProfessionals: (limit = 6) => request<Listing[]>("GET", `/professionals/top?limit=${limit}`),
@@ -178,59 +176,14 @@ export const api = {
   alerts: () => request<Alert[]>("GET", "/alerts"),
   createAlert: (name: string, searchCriteria: SearchFilters, frequency: Alert["frequency"]) => request<Alert>("POST", "/alerts", { name, searchCriteria, frequency }),
   deleteAlert: (id: number) => request<void>("DELETE", `/alerts/${id}`),
-  setFlags: (id: number, isPremium: boolean, isStarred: boolean) => request<{ user: User }>("POST", `/admin/users/${id}/flags`, { isPremium, isStarred }).then(r => r.user),
 };
 
 /** Where the browser navigates to start Google sign-in (a full-page redirect handled by the API). */
 export const googleSignInUrl = (returnUrl = "/") => `/api/auth/google/start?returnUrl=${encodeURIComponent(returnUrl)}`;
 export const googleLinkUrl = (returnUrl = "/") => `/api/auth/google/start?mode=link&returnUrl=${encodeURIComponent(returnUrl)}`;
 
-const MESSAGES: Record<string, string> = {
-  INVALID_CREDENTIALS: "Email or password is incorrect.",
-  ACCOUNT_LOCKED: "This account is locked. Try again later or contact support.",
-  DUPLICATE_EMAIL: "An account with this email already exists. Try signing in.",
-  VALIDATION_FAILED: "Please fix the highlighted fields.",
-  CSRF_REJECTED: "The request was blocked for your safety. Reload the page and try again.",
-  LINK_EXPIRED: "The Google link request expired. Start Google sign-in again.",
-  LINK_NOT_POSSIBLE: "This account has no password, so it can't be linked this way.",
-  LAST_ADMIN: "There must always be at least one active admin.",
-  CANNOT_MODIFY_SELF: "You can't change your own role or lock your own account.",
-  USER_NOT_FOUND: "That user no longer exists.",
-  INVALID_ROLE: "Unknown role.",
-  GOOGLE_NOT_CONFIGURED: "Google sign-in isn't configured on this server.",
-  SLOT_TAKEN: "That time is no longer available. Please choose another.",
-  START_IN_PAST: "Choose a time in the future.",
-  CANNOT_BOOK_SELF: "You can't book yourself.",
-  PROFESSIONAL_NOT_FOUND: "That professional is not available for booking.",
-  PROFESSION_NOT_FOUND: "That service listing no longer exists.",
-  INVALID_DURATION: "Choose a duration between 15 minutes and 8 hours.",
-  INVALID_TRANSITION: "That action isn't possible for this appointment any more.",
-  FORBIDDEN_ACTION: "Only the professional can do that.",
-  NOT_STARTED_YET: "You can complete an appointment once it has started.",
-  NOT_COMPLETED: "Only completed appointments can be reviewed.",
-  REVIEW_EXISTS: "You already reviewed this appointment.",
-  APPOINTMENT_NOT_FOUND: "That appointment doesn't exist.",
-  NOT_A_PROFESSIONAL: "Switch your profile type to professional first.",
-  HIDE_PROFESSIONS_FIRST: "Hide your service listings before switching back to a customer profile.",
-  DUPLICATE_PROFESSION: "You already offer that service.",
-  INVALID_SERVICE: "That service doesn't belong to the chosen category.",
-  ROOM_NOT_FOUND: "That conversation doesn't exist.",
-  CANNOT_CHAT_SELF: "You can't message yourself.",
-  ALERT_LIMIT: "You can save at most 20 searches.",
-  TooManyRequests: "You're doing that too quickly. Please wait a moment.",
-  SERVER_ERROR: "Something went wrong on our side. Please try again.",
-  // redirect-style errors from the Google flow (?error=...)
-  google_state: "The Google sign-in session expired or was invalid. Please try again.",
-  google_denied: "Google sign-in was cancelled.",
-  google_token: "Google sign-in could not be verified. Please try again.",
-  google_exchange: "Could not complete Google sign-in. Please try again.",
-  google_email_unverified: "Your Google email address isn't verified, so it can't be used to sign in.",
-  google_conflict: "That sign-up collided with another one. Please try again.",
-  account_locked: "This account is locked. Try again later or contact support.",
-  login_required: "Please sign in first.",
-};
-
+/** A human message for an error code, from the texts the API serves (see texts.ts). Unknown codes never leak raw internals. */
 export function errorMessage(error: unknown): string {
   const code = error instanceof ApiError ? error.code : typeof error === "string" ? error : "";
-  return MESSAGES[code] ?? (code ? "Something went wrong. Please try again." : "Network error. Please try again.");
+  return (code && getText(`error.${code}`)) || (code ? GENERIC_ERROR : NETWORK_ERROR);
 }

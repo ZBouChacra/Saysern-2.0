@@ -11,11 +11,14 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using MySqlConnector;
 using Sayserne.Api;
 using Sayserne.Api.Data;
+using Sayserne.Api.Auth;
+using Sayserne.Api.Platform;
 using Sayserne.Migrator;
 
 namespace Sayserne.Tests;
@@ -57,13 +60,14 @@ public sealed class TestDatabase
         var id = Guid.NewGuid().ToString("N");
         var options = new ProvisionOptions($"sayserne_test_{id[..10]}", $"m_{id[..8]}", $"Mp-{id[8..24]}", $"a_{id[..8]}", $"Ap-{id[12..28]}", TestEnv.UserHost);
         var server = new MySqlConnectionStringBuilder(TestEnv.AdminConnection);
-        string Conn(string user, string pw) => new MySqlConnectionStringBuilder
+        // The API account gets a small pool (many hosts run side by side); the migrator account is used for one-off calls, so no pooling at all.
+        string Conn(string user, string pw, bool pooled) => new MySqlConnectionStringBuilder
         {
             Server = server.Server, Port = server.Port, Database = options.DatabaseName, UserID = user, Password = pw,
-            AllowUserVariables = false,
+            AllowUserVariables = false, Pooling = pooled, MaximumPoolSize = pooled ? 6u : 100u,
         }.ConnectionString;
 
-        var db = new TestDatabase { Options = options, AppConnection = Conn(options.AppUser, options.AppPassword), MigratorConnection = Conn(options.MigratorUser, options.MigratorPassword) };
+        var db = new TestDatabase { Options = options, AppConnection = Conn(options.AppUser, options.AppPassword, pooled: true), MigratorConnection = Conn(options.MigratorUser, options.MigratorPassword, pooled: false) };
         All.Add(db);
         await Provisioner.RunAsync(TestEnv.AdminConnection, dbDir ?? TestEnv.DbDir, options);
         if (migrate) await new MigrationRunner(db.MigratorConnection, dbDir ?? TestEnv.DbDir).RunAsync();
@@ -73,6 +77,7 @@ public sealed class TestDatabase
     public async Task DropAsync()
     {
         lock (_dataSourceLock) { _dataSource?.Dispose(); _dataSource = null; }
+        MySqlConnection.ClearAllPools();   // idle pooled connections of this database would otherwise linger and count against max_connections
         await Provisioner.DeprovisionAsync(TestEnv.AdminConnection, TestEnv.DbDir, Options);
     }
 
@@ -156,6 +161,9 @@ public sealed class TestClient
         return (response.StatusCode, text.Length == 0 ? default : JsonDocument.Parse(text).RootElement.Clone());
     }
 
+    public static string? Str(JsonElement body, string name) =>
+        body.ValueKind == JsonValueKind.Object && body.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+
     public static string? Error(JsonElement body) =>
         body.ValueKind == JsonValueKind.Object && body.TryGetProperty("error", out var e) ? e.GetString() : null;
 }
@@ -165,18 +173,22 @@ public sealed class ApiHost : IAsyncDisposable
 {
     public required WebApplication App { get; init; }
     public FakeGoogle? Google { get; init; }
+    public required TestDatabase Database { get; init; }
     public Uri BaseUri => new(App.Urls.First());
 
-    public static async Task<ApiHost> StartAsync(Dictionary<string, string?>? overrides = null, bool withGoogle = false, TestDatabase? database = null)
+    public static async Task<ApiHost> StartAsync(Dictionary<string, string?>? overrides = null, bool withGoogle = false, TestDatabase? database = null, TimeProvider? clock = null, bool pinRateLimit = true)
     {
         var db = database ?? await TestEnv.GetDatabaseAsync();
         var google = withGoogle ? await FakeGoogle.StartAsync() : null;
         var settings = new Dictionary<string, string?>
         {
             ["ConnectionStrings:Default"] = db.AppConnection,
-            ["Auth:PasswordIterations"] = "2000",          // fast hashing for tests only
-            ["Auth:AuthRequestsPerMinute"] = "100000",
+            ["Auth:PasswordIterations"] = "2000",          // fast hashing for tests only (deploy-time setting)
+            ["Settings:RefreshSeconds"] = "3600",           // tests refresh explicitly
         };
+        // "Auth:Xyz" keys given by tests pin the runtime setting "Auth.Xyz" for this host only (other tests share the database, so it is never written there)
+        var pinned = new Dictionary<string, string>();
+        if (pinRateLimit) pinned["Auth.AuthRequestsPerMinute"] = "100000";
         if (google != null)
         {
             settings["Google:ClientId"] = FakeGoogle.ClientId;
@@ -186,16 +198,23 @@ public sealed class ApiHost : IAsyncDisposable
             settings["Google:TokenEndpoint"] = google.BaseUrl + "/token";
             settings["Google:JwksUri"] = google.BaseUrl + "/certs";
         }
-        if (overrides != null) foreach (var (k, v) in overrides) settings[k] = v;
+        if (overrides != null)
+            foreach (var (k, v) in overrides)
+            {
+                if (k.StartsWith("Auth:", StringComparison.Ordinal) && k != "Auth:PasswordIterations") pinned["Auth." + k["Auth:".Length..]] = v!;
+                else settings[k] = v;
+            }
 
         var app = AppFactory.Build([], b =>
         {
             b.Configuration.AddInMemoryCollection(settings);
+            b.Services.AddSingleton(new SettingOverrides(pinned));
+            if (clock != null) b.Services.AddSingleton(clock);
             b.WebHost.UseUrls("http://127.0.0.1:0");
             b.Logging.ClearProviders();
         }, "Development");
         await app.StartAsync();
-        return new ApiHost { App = app, Google = google };
+        return new ApiHost { App = app, Google = google, Database = db };
     }
 
     public TestClient NewClient(bool csrfHeader = true) => new(BaseUri, csrfHeader);
@@ -262,7 +281,7 @@ public sealed class ApiHost : IAsyncDisposable
         Assert.Equal(HttpStatusCode.Created, s1);
         var id = booked.GetProperty("id").GetInt64();
         Assert.Equal(HttpStatusCode.OK, (await pro.PostAsync($"/api/appointments/{id}/status", new { status = "approved" })).Status);
-        await (await TestEnv.GetDatabaseAsync()).BackdateAppointmentAsync(id);
+        await Database.BackdateAppointmentAsync(id);
         Assert.Equal(HttpStatusCode.OK, (await pro.PostAsync($"/api/appointments/{id}/status", new { status = "completed" })).Status);
         return id;
     }
@@ -270,15 +289,83 @@ public sealed class ApiHost : IAsyncDisposable
     public static string? Str(JsonElement e, string name) => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
     public static bool Has(JsonElement e, string name) => e.ValueKind == JsonValueKind.Object && e.TryGetProperty(name, out var v) && v.ValueKind != JsonValueKind.Null;
 
-    /// <summary>Registers a user, promotes it to admin, and signs in again so the session carries the admin role.</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, AdminSecrets> Secrets = new();
+    private sealed class AdminSecrets { public string Secret = ""; public long LastStep; public List<string> Recovery = []; }
+
+    /// <summary>Signs in to the back office with password + authenticator code (enrolling on the first sign-in). Returns the admin session.</summary>
+    public async Task<(TestClient Client, long Id)> AdminSignInAsync(string email, string password = StrongPassword)
+    {
+        var client = NewClient();
+        var (status, body) = await client.PostAsync("/api/admin/auth/login", new { email, password });
+        Assert.Equal(HttpStatusCode.OK, status);
+        var known = Secrets.GetOrAdd(email, _ => new AdminSecrets());
+        if (TestClient.Str(body, "status") == "enrollment_required")
+        {
+            var (es, enroll) = await client.PostAsync("/api/admin/auth/2fa/enroll");
+            Assert.Equal(HttpStatusCode.OK, es);
+            known.Secret = enroll.GetProperty("secret").GetString()!;
+            var step = Totp.StepAt(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+            var (cs, confirm) = await client.PostAsync("/api/admin/auth/2fa/confirm", new { code = Totp.Code(known.Secret, step) });
+            Assert.Equal(HttpStatusCode.OK, cs);
+            known.LastStep = step;
+            known.Recovery = confirm.GetProperty("recoveryCodes").EnumerateArray().Select(c => c.GetString()!).ToList();
+        }
+        else
+        {
+            // each 30-second step can be used once: take the next unused step inside the accepted window, else fall back to a recovery code
+            var now = Totp.StepAt(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+            var next = Math.Max(known.LastStep + 1, now - 1);
+            object payload;
+            if (next <= now + 1) { known.LastStep = next; payload = new { code = Totp.Code(known.Secret, next) }; }
+            else { var code = known.Recovery[0]; known.Recovery.RemoveAt(0); payload = new { recoveryCode = code }; }
+            var (vs, _) = await client.PostAsync("/api/admin/auth/verify", payload);
+            Assert.Equal(HttpStatusCode.OK, vs);
+        }
+        var (_, me) = await client.GetAsync("/api/admin/auth/me");
+        return (client, me.GetProperty("user").GetProperty("id").GetInt64());
+    }
+
+    public static string SecretOf(string email) => Secrets[email].Secret;
+    public static IReadOnlyList<string> RecoveryCodesOf(string email) => Secrets[email].Recovery;
+
+    /// <summary>Registers a user, makes them a super admin, and signs in to the back office (enrolling two-factor).</summary>
     public async Task<(TestClient Client, string Email, long Id)> CreateAdminAsync()
     {
         var (_, email, id) = await RegisterAsync();
-        await (await TestEnv.GetDatabaseAsync()).PromoteToAdminAsync(email);
-        var client = NewClient();
-        var (status, _) = await client.PostAsync("/api/auth/login", new { email, password = StrongPassword });
-        Assert.Equal(HttpStatusCode.OK, status);
+        await Database.PromoteToAdminAsync(email);
+        var (client, _) = await AdminSignInAsync(email);
         return (client, email, id);
+    }
+
+    /// <summary>A staff member who is NOT a super admin: holds a role with exactly the given permissions.</summary>
+    public async Task<(TestClient Client, string Email, long Id)> CreateStaffAsync(params string[] permissions)
+    {
+        var (admin, _, _) = await CreateAdminAsync();
+        var (rs, role) = await admin.PostAsync("/api/admin/roles", new { name = "Role " + Guid.NewGuid().ToString("N")[..10], permissions });
+        Assert.Equal(HttpStatusCode.Created, rs);
+        var (_, email, id) = await RegisterAsync();
+        Assert.Equal(HttpStatusCode.OK, (await admin.PutAsync($"/api/admin/users/{id}/roles", new { roleIds = new[] { role.GetProperty("id").GetInt64() } })).Status);
+        var (client, _) = await AdminSignInAsync(email);
+        return (client, email, id);
+    }
+}
+
+/// <summary>A host with its own database, for tests that change shared configuration (settings, lookups, translations). Removed on dispose.</summary>
+public sealed class IsolatedHost : IAsyncDisposable
+{
+    public required ApiHost Host { get; init; }
+    public required TestDatabase Db { get; init; }
+
+    public static async Task<IsolatedHost> StartAsync(Dictionary<string, string?>? overrides = null, bool withGoogle = false, TimeProvider? clock = null, bool pinRateLimit = true)
+    {
+        var db = await TestDatabase.CreateAsync();
+        return new IsolatedHost { Db = db, Host = await ApiHost.StartAsync(overrides, withGoogle, db, clock, pinRateLimit) };
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await Host.DisposeAsync();
+        await Db.DropAsync();
     }
 }
 

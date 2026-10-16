@@ -1,4 +1,4 @@
--- Repeatable: back-office user administration.
+-- Repeatable: back-office user administration. Every change takes the acting admin's id and is audited in the same transaction.
 
 DROP PROCEDURE IF EXISTS sp_admin_users_list;
 DROP PROCEDURE IF EXISTS sp_admin_users_set_locked;
@@ -8,7 +8,7 @@ DROP PROCEDURE IF EXISTS sp_admin_users_set_flags;
 
 DELIMITER $$
 
--- Two result sets: the requested page, then a single row with the total match count.
+-- Two result sets: the requested page (with role names and whether two-factor is set up), then the total match count.
 CREATE PROCEDURE sp_admin_users_list(IN p_search VARCHAR(255), IN p_page INT, IN p_page_size INT)
 BEGIN
   DECLARE v_size INT;
@@ -19,25 +19,28 @@ BEGIN
   SET v_offset = (GREATEST(IFNULL(p_page, 1), 1) - 1) * v_size;
   SET v_like = NULL;
   IF p_search IS NOT NULL AND CHAR_LENGTH(TRIM(p_search)) > 0 THEN
-    SET v_like = CONCAT('%', TRIM(p_search), '%');
+    SET v_like = CONCAT('%', REPLACE(REPLACE(REPLACE(TRIM(p_search), '|', '||'), '%', '|%'), '_', '|_'), '%');
   END IF;
 
-  SELECT id, email, email_verified, password_hash, first_name, last_name, role, profile_type,
-         is_locked, failed_login_attempts, locked_until, created_at, is_premium, is_starred
-  FROM users
-  WHERE v_like IS NULL OR email LIKE v_like OR first_name LIKE v_like OR last_name LIKE v_like
-  ORDER BY created_at DESC, id DESC
+  SELECT u.id, u.email, u.email_verified, u.password_hash, u.first_name, u.last_name, u.role, u.profile_type,
+         u.is_locked, u.failed_login_attempts, u.locked_until, u.created_at, u.is_premium, u.is_starred,
+         (SELECT GROUP_CONCAT(r.name ORDER BY r.name SEPARATOR ', ') FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = u.id) AS role_names,
+         EXISTS (SELECT 1 FROM user_two_factor t WHERE t.user_id = u.id AND t.confirmed_at IS NOT NULL) AS has_two_factor
+  FROM users u
+  WHERE v_like IS NULL OR u.email LIKE v_like ESCAPE '|' OR u.first_name LIKE v_like ESCAPE '|' OR u.last_name LIKE v_like ESCAPE '|'
+  ORDER BY u.created_at DESC, u.id DESC
   LIMIT v_size OFFSET v_offset;
 
   SELECT COUNT(*) AS total
-  FROM users
-  WHERE v_like IS NULL OR email LIKE v_like OR first_name LIKE v_like OR last_name LIKE v_like;
+  FROM users u
+  WHERE v_like IS NULL OR u.email LIKE v_like ESCAPE '|' OR u.first_name LIKE v_like ESCAPE '|' OR u.last_name LIKE v_like ESCAPE '|';
 END$$
 
 -- Locks/unlocks an account. Refuses to lock the last active admin.
-CREATE PROCEDURE sp_admin_users_set_locked(IN p_user_id BIGINT UNSIGNED, IN p_is_locked TINYINT(1))
+CREATE PROCEDURE sp_admin_users_set_locked(IN p_actor_id BIGINT UNSIGNED, IN p_user_id BIGINT UNSIGNED, IN p_is_locked TINYINT(1))
 BEGIN
   DECLARE v_role VARCHAR(10);
+  DECLARE v_email VARCHAR(255);
   DECLARE v_others INT;
   DECLARE EXIT HANDLER FOR SQLEXCEPTION
   BEGIN
@@ -46,7 +49,7 @@ BEGIN
   END;
 
   START TRANSACTION;
-  SELECT role INTO v_role FROM users WHERE id = p_user_id FOR UPDATE;
+  SELECT role, email INTO v_role, v_email FROM users WHERE id = p_user_id FOR UPDATE;
   IF v_role IS NULL THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'USER_NOT_FOUND';
   END IF;
@@ -61,15 +64,18 @@ BEGIN
          failed_login_attempts = IF(p_is_locked = 0, 0, failed_login_attempts),
          locked_until = IF(p_is_locked = 0, NULL, locked_until)
    WHERE id = p_user_id;
+  CALL sp_audit_write(p_actor_id, IF(p_is_locked = 1, 'users.lock', 'users.unlock'), 'user', p_user_id,
+                      CONCAT(IF(p_is_locked = 1, 'Locked ', 'Unlocked '), v_email), NULL, NULL);
   COMMIT;
 
   CALL sp_users_get_by_id(p_user_id);
 END$$
 
--- Changes a role. Refuses to demote the last active admin.
-CREATE PROCEDURE sp_admin_users_set_role(IN p_user_id BIGINT UNSIGNED, IN p_role VARCHAR(10))
+-- Changes the super-admin flag. Refuses to demote the last active admin.
+CREATE PROCEDURE sp_admin_users_set_role(IN p_actor_id BIGINT UNSIGNED, IN p_user_id BIGINT UNSIGNED, IN p_role VARCHAR(10))
 BEGIN
   DECLARE v_current VARCHAR(10);
+  DECLARE v_email VARCHAR(255);
   DECLARE v_others INT;
   DECLARE EXIT HANDLER FOR SQLEXCEPTION
   BEGIN
@@ -82,7 +88,7 @@ BEGIN
   END IF;
 
   START TRANSACTION;
-  SELECT role INTO v_current FROM users WHERE id = p_user_id FOR UPDATE;
+  SELECT role, email INTO v_current, v_email FROM users WHERE id = p_user_id FOR UPDATE;
   IF v_current IS NULL THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'USER_NOT_FOUND';
   END IF;
@@ -93,12 +99,14 @@ BEGIN
     END IF;
   END IF;
   UPDATE users SET role = p_role WHERE id = p_user_id;
+  CALL sp_audit_write(p_actor_id, 'users.role', 'user', p_user_id, CONCAT('Set super-admin role of ', v_email, ' to ', p_role),
+                      JSON_OBJECT('old', v_current, 'new', p_role), NULL);
   COMMIT;
 
   CALL sp_users_get_by_id(p_user_id);
 END$$
 
--- Used by the migrator CLI to create the first admin.
+-- Used by the migrator CLI to create the first admin (no acting user).
 CREATE PROCEDURE sp_admin_users_promote_by_email(IN p_email VARCHAR(255))
 BEGIN
   DECLARE v_id BIGINT UNSIGNED;
@@ -107,18 +115,28 @@ BEGIN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'USER_NOT_FOUND';
   END IF;
   UPDATE users SET role = 'admin' WHERE id = v_id;
+  CALL sp_audit_write(NULL, 'cli.promote_admin', 'user', v_id, CONCAT('Promoted ', p_email, ' to super admin from the command line'), NULL, NULL);
   CALL sp_users_get_by_id(v_id);
 END$$
 
 -- Premium / starred listing flags (affect search ranking).
-CREATE PROCEDURE sp_admin_users_set_flags(IN p_user_id BIGINT UNSIGNED, IN p_is_premium TINYINT(1), IN p_is_starred TINYINT(1))
+CREATE PROCEDURE sp_admin_users_set_flags(IN p_actor_id BIGINT UNSIGNED, IN p_user_id BIGINT UNSIGNED, IN p_is_premium TINYINT(1), IN p_is_starred TINYINT(1))
 BEGIN
-  DECLARE v_id BIGINT UNSIGNED;
-  SELECT id INTO v_id FROM users WHERE id = p_user_id;
-  IF v_id IS NULL THEN
+  DECLARE v_email VARCHAR(255);
+  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+  BEGIN
+    ROLLBACK;
+    RESIGNAL;
+  END;
+  START TRANSACTION;
+  SELECT email INTO v_email FROM users WHERE id = p_user_id FOR UPDATE;
+  IF v_email IS NULL THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'USER_NOT_FOUND';
   END IF;
   UPDATE users SET is_premium = p_is_premium, is_starred = p_is_starred WHERE id = p_user_id;
+  CALL sp_audit_write(p_actor_id, 'users.flags', 'user', p_user_id, CONCAT('Set flags of ', v_email, ': premium=', p_is_premium, ', starred=', p_is_starred),
+                      JSON_OBJECT('premium', p_is_premium, 'starred', p_is_starred), NULL);
+  COMMIT;
   CALL sp_users_get_by_id(p_user_id);
 END$$
 

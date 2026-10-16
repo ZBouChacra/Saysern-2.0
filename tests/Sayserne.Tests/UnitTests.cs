@@ -4,9 +4,27 @@ using Microsoft.Extensions.Options;
 using Sayserne.Api;
 using Sayserne.Api.Auth;
 using Sayserne.Api.Data;
+using Sayserne.Api.Platform;
 using Sayserne.Migrator;
 
 namespace Sayserne.Tests;
+
+/// <summary>Settings with the shipped defaults, for tests that only need the rules (no database).</summary>
+public sealed class FixedSettings(Dictionary<string, string>? values = null) : ISettingsService
+{
+    private readonly Dictionary<string, string> _v = new()
+    {
+        ["Auth.PasswordMinLength"] = "10", ["Auth.PasswordRequireLetter"] = "true", ["Auth.PasswordRequireDigit"] = "true",
+    };
+    public FixedSettings(string key, string value) : this(new Dictionary<string, string> { [key] = value }) { }
+    public long Version => 1;
+    public int GetInt(string key) => int.Parse(Get(key));
+    public bool GetBool(string key) => Get(key) == "true";
+    public string GetString(string key) => Get(key);
+    public Task RefreshAsync(CancellationToken ct = default) => Task.CompletedTask;
+    public IReadOnlyDictionary<string, object> PublicValues() => new Dictionary<string, object>();
+    private string Get(string key) => values?.GetValueOrDefault(key) ?? _v[key];
+}
 
 public class PasswordHasherTests
 {
@@ -49,7 +67,7 @@ public class ValidationTests
     private static RegisterRequest Valid() => new("Person@Example.com", "correct-horse-9", "Pat", "Person");
 
     [Fact]
-    public void Valid_registration_has_no_errors() => Assert.Equal(0, InputValidation.ValidateRegistration(Valid()).Count);
+    public void Valid_registration_has_no_errors() => Assert.Equal(0, InputValidation.ValidateRegistration(Valid(), new FixedSettings()).Count);
 
     [Theory]
     [InlineData("short1")]
@@ -57,14 +75,14 @@ public class ValidationTests
     [InlineData("1234567890123")]
     public void Weak_passwords_are_rejected(string password)
     {
-        var errors = InputValidation.ValidateRegistration(Valid() with { Password = password });
+        var errors = InputValidation.ValidateRegistration(Valid() with { Password = password }, new FixedSettings());
         Assert.True(errors.ContainsKey("password"));
     }
 
     [Fact]
     public void Password_must_not_equal_the_email()
     {
-        var errors = InputValidation.ValidateRegistration(Valid() with { Email = "person.abc12@example.com", Password = "person.abc12@example.com" });
+        var errors = InputValidation.ValidateRegistration(Valid() with { Email = "person.abc12@example.com", Password = "person.abc12@example.com" }, new FixedSettings());
         Assert.True(errors.ContainsKey("password"));
     }
 
@@ -75,13 +93,13 @@ public class ValidationTests
     [InlineData("a b@c.de")]
     public void Bad_emails_are_rejected(string email)
     {
-        Assert.True(InputValidation.ValidateRegistration(Valid() with { Email = email }).ContainsKey("email"));
+        Assert.True(InputValidation.ValidateRegistration(Valid() with { Email = email }, new FixedSettings()).ContainsKey("email"));
     }
 
     [Fact]
     public void Missing_or_oversized_names_are_rejected()
     {
-        var errors = InputValidation.ValidateRegistration(Valid() with { FirstName = " ", LastName = new string('x', 101) });
+        var errors = InputValidation.ValidateRegistration(Valid() with { FirstName = " ", LastName = new string('x', 101) }, new FixedSettings());
         Assert.True(errors.ContainsKey("firstName"));
         Assert.True(errors.ContainsKey("lastName"));
     }

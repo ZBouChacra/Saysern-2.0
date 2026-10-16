@@ -2,7 +2,6 @@ import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "./api";
 import { useAuth } from "./auth";
-import Admin from "./pages/Admin";
 import Alerts from "./pages/Alerts";
 import Appointments from "./pages/Appointments";
 import Book from "./pages/Book";
@@ -30,7 +29,6 @@ function Header() {
       <Link to="/" className="brand">Say<span>Serné</span></Link>
       <nav>
         <Link to="/search">Search</Link>
-        {user?.role === "admin" && <Link to="/admin">Back office</Link>}
         {user ? (
           <>
             <Link to="/appointments">Appointments</Link>
@@ -59,15 +57,6 @@ function RequireUser({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-/** UI guard only: the API enforces the same rule on every admin endpoint. */
-function RequireAdmin({ children }: { children: ReactNode }) {
-  const { user, loading } = useAuth();
-  if (loading) return <p className="muted">Loading…</p>;
-  if (!user) return <Navigate to="/login?error=login_required" replace />;
-  if (user.role !== "admin") return <main className="card"><h1>Not authorised</h1><p>This area is for administrators.</p></main>;
-  return <>{children}</>;
-}
-
 export default function App() {
   return (
     <>
@@ -85,7 +74,6 @@ export default function App() {
         <Route path="/chats/:roomId" element={<RequireUser><Chats /></RequireUser>} />
         <Route path="/alerts" element={<RequireUser><Alerts /></RequireUser>} />
         <Route path="/me" element={<RequireUser><MyProfile /></RequireUser>} />
-        <Route path="/admin" element={<RequireAdmin><Admin /></RequireAdmin>} />
         <Route path="*" element={<main className="card"><h1>Page not found</h1><Link to="/">Go home</Link></main>} />
       </Routes>
     </>

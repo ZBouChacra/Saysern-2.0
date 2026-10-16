@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, errorMessage, type BusySlot, type ProfessionalPage } from "../api";
+import { useConfig, useLookup } from "../config";
 import { fullName, when } from "../components";
 
 export default function Book() {
@@ -11,7 +12,11 @@ export default function Book() {
   const [busy, setBusy] = useState<BusySlot[]>([]);
   const [professionId, setProfessionId] = useState<number | undefined>();
   const [start, setStart] = useState("");
-  const [duration, setDuration] = useState(60);
+  const cfg = useConfig();
+  const { values: allDurations, name: durationName } = useLookup("duration_option");
+  const durations = allDurations.filter(d => Number(d.code) >= cfg.num("Booking.MinDurationMinutes") && Number(d.code) <= cfg.num("Booking.MaxDurationMinutes"));
+  const [duration, setDuration] = useState(0);
+  useEffect(() => { if (durations.length && !durations.some(d => Number(d.code) === duration)) setDuration(Number((durations.find(d => d.code === "60") ?? durations[0]).code)); }, [durations, duration]);
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -48,8 +53,8 @@ export default function Book() {
         )}
         <label>Date and time<input type="datetime-local" value={start} onChange={e => setStart(e.target.value)} required /></label>
         <label>Duration
-          <select value={duration} onChange={e => setDuration(Number(e.target.value))}>{[30, 45, 60, 90, 120, 180].map(m => <option key={m} value={m}>{m} minutes</option>)}</select></label>
-        <label>What do you need? (optional)<input value={note} onChange={e => setNote(e.target.value)} maxLength={1000} /></label>
+          <select value={duration} onChange={e => setDuration(Number(e.target.value))}>{durations.map(d => <option key={d.code} value={Number(d.code)}>{durationName(d)}</option>)}</select></label>
+        <label>What do you need? (optional)<input value={note} onChange={e => setNote(e.target.value)} maxLength={cfg.num("Booking.MaxDescriptionLength")} /></label>
         {clash && <p className="error" role="alert">That time overlaps an existing booking.</p>}
         {error && <p className="error" role="alert">{error}</p>}
         <button className="btn" disabled={sending || !start || clash}>{sending ? "Requesting…" : "Request appointment"}</button>

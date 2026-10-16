@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Sayserne.Api.Data;
+using Sayserne.Api.Platform;
 
 namespace Sayserne.Api.Infrastructure;
 
@@ -47,15 +48,14 @@ public static partial class MarketplaceValidation
         return t;
     }
 
-    public static ProfileValues ValidateProfile(ProfileInput i)
+    public static ProfileValues ValidateProfile(ProfileInput i, ISettingsService settings)
     {
         var e = new Errs();
         var first = Clean(i.FirstName, "firstName", 100, e, required: true);
         var last = Clean(i.LastName, "lastName", 100, e, required: true);
         var phone = Clean(i.Phone, "phone", 50, e);
         if (phone != null && !PhonePattern().IsMatch(phone)) e.Add("phone", "Enter a valid phone number.");
-        var sex = Clean(i.Sex, "sex", 10, e)?.ToLowerInvariant();
-        if (sex is not (null or "male" or "female")) e.Add("sex", "Must be male or female.");
+        var sex = Clean(i.Sex, "sex", 30, e)?.ToLowerInvariant();   // existence in the "sex" lookup is checked by the database
         DateOnly? dob = null;
         if (!string.IsNullOrWhiteSpace(i.DateOfBirth))
         {
@@ -63,19 +63,18 @@ public static partial class MarketplaceValidation
             else if (d > DateOnly.FromDateTime(DateTime.UtcNow) || d < new DateOnly(1900, 1, 1)) e.Add("dateOfBirth", "Enter a realistic date of birth.");
             else dob = d;
         }
-        var language = (i.PreferredLanguage ?? "en").Trim().ToLowerInvariant();
-        if (language is not ("en" or "ar")) e.Add("preferredLanguage", "Must be en or ar.");
+        var language = (i.PreferredLanguage ?? settings.GetString("Site.DefaultLanguage")).Trim().ToLowerInvariant();   // must be an active "language" lookup value (checked by the database)
         var type = (i.ProfileType ?? "customer").Trim().ToLowerInvariant();
         if (type is not ("customer" or "professional")) e.Add("profileType", "Must be customer or professional.");
 
         var values = new ProfileValues(first ?? "", last ?? "", phone, sex, dob, Clean(i.Nationality, "nationality", 100, e), Clean(i.Country, "country", 100, e),
-            Clean(i.City, "city", 100, e), Clean(i.Bio, "bio", 2000, e), Clean(i.Portfolio, "portfolio", 20000, e), Url(i.ProfilePhoto, "profilePhoto", 500, e),
+            Clean(i.City, "city", 100, e), Clean(i.Bio, "bio", settings.GetInt("Profile.MaxBioLength"), e), Clean(i.Portfolio, "portfolio", 20000, e), Url(i.ProfilePhoto, "profilePhoto", 500, e),
             Url(i.BannerPhoto, "bannerPhoto", 500, e), language, type);
         e.ThrowIfAny();
         return values;
     }
 
-    public static (long CategoryId, long ServiceId, ProfessionValues Values, bool IsHidden) ValidateProfession(ProfessionInput i, bool requireIds)
+    public static (long CategoryId, long ServiceId, ProfessionValues Values, bool IsHidden) ValidateProfession(ProfessionInput i, bool requireIds, ISettingsService settings)
     {
         var e = new Errs();
         if (requireIds)
@@ -89,7 +88,8 @@ public static partial class MarketplaceValidation
         var teamSize = hasTeam ? i.TeamSize ?? 0 : 0;
         if (teamSize is < 0 or > 100_000) e.Add("teamSize", "Enter a realistic team size.");
         var areas = (i.GeographicAreas ?? []).Select(a => a?.Trim() ?? "").Where(a => a.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        if (areas.Count > 30) e.Add("geographicAreas", "At most 30 areas.");
+        var maxAreas = settings.GetInt("Profile.MaxGeographicAreas");
+        if (areas.Count > maxAreas) e.Add("geographicAreas", $"At most {maxAreas} areas.");
         if (areas.Any(a => a.Length > 100)) e.Add("geographicAreas", "Each area must be at most 100 characters.");
 
         var values = new ProfessionValues(Clean(i.Country, "country", 100, e), Clean(i.City, "city", 100, e), i.CostPerHour is { } c ? Math.Round(c, 2) : null,
@@ -123,12 +123,11 @@ public static partial class MarketplaceValidation
         return result;
     }
 
-    public static SearchFilters ValidateSearch(SearchFilters f)
+    public static SearchFilters ValidateSearch(SearchFilters f, ISettingsService settings)
     {
         var e = new Errs();
         string? S(string? v, string field) => Clean(v, field, 100, e);
         var sex = S(f.Sex, "sex")?.ToLowerInvariant();
-        if (sex is not (null or "male" or "female")) e.Add("sex", "Must be male or female.");
         if (f.MinAge is < 0 or > 120 || f.MaxAge is < 0 or > 120) e.Add("age", "Age must be between 0 and 120.");
         if (f.MinAge > f.MaxAge) e.Add("age", "Minimum age exceeds maximum age.");
         if (f.MinStars is < 0 or > 5) e.Add("minStars", "Between 0 and 5.");
@@ -137,33 +136,36 @@ public static partial class MarketplaceValidation
         if (f.MinExperience is < 0 or > 80 || f.MaxExperience is < 0 or > 80) e.Add("experience", "Between 0 and 80.");
         if (f.MinExperience > f.MaxExperience) e.Add("experience", "Minimum experience exceeds maximum.");
         if (f.Page is < 1 or > 10_000) e.Add("page", "Invalid page.");
-        if (f.PageSize is < 1 or > 50) e.Add("pageSize", "Between 1 and 50.");
+        var maxPage = settings.GetInt("Search.MaxPageSize");
+        if (f.PageSize is < 1 || f.PageSize > maxPage) e.Add("pageSize", $"Between 1 and {maxPage}.");
         var clean = f with { FirstName = S(f.FirstName, "firstName"), LastName = S(f.LastName, "lastName"), Sex = sex, Nationality = S(f.Nationality, "nationality"),
             Country = S(f.Country, "country"), City = S(f.City, "city") };
         e.ThrowIfAny();
         return clean;
     }
 
-    public static (DateTime StartUtc, int Duration, string? Description) ValidateBooking(BookingInput i)
+    public static (DateTime StartUtc, int Duration, string? Description) ValidateBooking(BookingInput i, ISettingsService settings)
     {
         var e = new Errs();
         if (i.ProfessionalId is null or <= 0) e.Add("professionalId", "Required.");
         if (i.StartsAt is null) e.Add("startsAt", "Required (ISO 8601 with offset, e.g. 2026-11-02T10:00:00Z).");
-        var duration = i.DurationMinutes ?? 60;
-        if (duration is < 15 or > 480) e.Add("durationMinutes", "Between 15 and 480.");
-        var description = Clean(i.Description, "description", 1000, e);
+        var minDuration = settings.GetInt("Booking.MinDurationMinutes");
+        var maxDuration = settings.GetInt("Booking.MaxDurationMinutes");
+        var duration = i.DurationMinutes ?? Math.Clamp(60, minDuration, maxDuration);
+        if (duration < minDuration || duration > maxDuration) e.Add("durationMinutes", $"Between {minDuration} and {maxDuration}.");
+        var description = Clean(i.Description, "description", settings.GetInt("Booking.MaxDescriptionLength"), e);
         e.ThrowIfAny();
         return (i.StartsAt!.Value.UtcDateTime, duration, description);
     }
 
-    public static (string Type, string? Content, decimal? Lat, decimal? Lng) ValidateMessage(SendMessageInput i)
+    public static (string Type, string? Content, decimal? Lat, decimal? Lng) ValidateMessage(SendMessageInput i, ISettingsService settings)
     {
         var e = new Errs();
         var type = (i.Type ?? "text").Trim().ToLowerInvariant();
         string? content = null;
         if (type == "text")
         {
-            content = Clean(i.Content, "content", 4000, e, required: true);
+            content = Clean(i.Content, "content", settings.GetInt("Chat.MaxMessageLength"), e, required: true);
         }
         else if (type == "location")
         {
@@ -175,15 +177,15 @@ public static partial class MarketplaceValidation
         return (type, content, i.Latitude, i.Longitude);
     }
 
-    public static (string Name, SearchFilters Criteria, string Frequency) ValidateAlert(AlertInput i)
+    public static (string Name, SearchFilters Criteria, string Frequency) ValidateAlert(AlertInput i, ISettingsService settings)
     {
         var e = new Errs();
         var name = Clean(i.Name, "name", 100, e, required: true);
         var frequency = (i.Frequency ?? "daily").Trim().ToLowerInvariant();
-        if (frequency is not ("daily" or "weekly" or "monthly")) e.Add("frequency", "Must be daily, weekly or monthly.");
+        // the frequency must exist in the "alert_frequency" lookup (checked by the database)
         if (i.SearchCriteria is null) e.Add("searchCriteria", "Required.");
         e.ThrowIfAny();
-        var criteria = ValidateSearch(i.SearchCriteria!) with { Page = null, PageSize = null };
+        var criteria = ValidateSearch(i.SearchCriteria! with { Page = null, PageSize = null }, settings);
         return (name!, criteria, frequency);
     }
 }

@@ -49,7 +49,7 @@ public class ProfileApiTests
     {
         await using var host = await ApiHost.StartAsync();
         var (c, email, _) = await host.RegisterAsync();
-        var (status, updated) = await c.PutAsync("/api/me/profile", ApiHost.ProfileBody("Rima", "Haddad", "customer", "Beirut", "Lebanon", "female", "1990-05-17", "Lebanese", "+961 71 123 456", "Hello"));
+        var (status, updated) = await c.PutAsync("/api/me/profile", ApiHost.ProfileBody("Rima", "Haddad", "customer", "Beirut", "LB", "female", "1990-05-17", "lebanese", "+961 71 123 456", "Hello"));
         Assert.Equal(HttpStatusCode.OK, status);
         Assert.Equal("Rima", ApiHost.Str(updated, "firstName"));
         Assert.Equal("1990-05-17", ApiHost.Str(updated, "dateOfBirth"));
@@ -76,13 +76,13 @@ public class ProfileApiTests
         var (c, _, _) = await host.RegisterAsync();
         var (status, body) = await c.PutAsync("/api/me/profile", new
         {
-            firstName = "", lastName = new string('x', 101), phone = "abc", sex = "other", dateOfBirth = "17/05/1990",
-            profilePhoto = "javascript:alert(1)", bannerPhoto = "ftp://x/y", preferredLanguage = "fr", profileType = "wizard", bio = new string('b', 2001),
+            firstName = "", lastName = new string('x', 101), phone = "abc", dateOfBirth = "17/05/1990",
+            profilePhoto = "javascript:alert(1)", bannerPhoto = "ftp://x/y", profileType = "wizard", bio = new string('b', 2001),
         });
         Assert.Equal(HttpStatusCode.BadRequest, status);
         Assert.Equal("VALIDATION_FAILED", TestClient.Error(body));
         var errors = body.GetProperty("errors");
-        foreach (var field in new[] { "firstName", "lastName", "phone", "sex", "dateOfBirth", "profilePhoto", "bannerPhoto", "preferredLanguage", "profileType", "bio" })
+        foreach (var field in new[] { "firstName", "lastName", "phone", "dateOfBirth", "profilePhoto", "bannerPhoto", "profileType", "bio" })
             Assert.True(errors.TryGetProperty(field, out _), $"expected an error for {field}");
     }
 
@@ -101,7 +101,7 @@ public class ProfileApiTests
     {
         await using var host = await ApiHost.StartAsync();
         var (c, email, id) = await host.RegisterAsync();
-        await c.PutAsync("/api/me/profile", ApiHost.ProfileBody("Rami", "Karam", "professional", "Beirut", "Lebanon", "male", "1985-03-02", "Lebanese", "+961 3 999 888", "Lawyer"));
+        await c.PutAsync("/api/me/profile", ApiHost.ProfileBody("Rami", "Karam", "professional", "Beirut", "LB", "male", "1985-03-02", "lebanese", "+961 3 999 888", "Lawyer"));
         var (status, body) = await host.NewClient().GetAsync($"/api/professionals/{id}");   // anonymous
         Assert.Equal(HttpStatusCode.OK, status);
         var text = body.GetRawText();
@@ -351,10 +351,10 @@ public class SearchApiTests
     {
         await using var host = await ApiHost.StartAsync();
         var tag = "Srch" + Guid.NewGuid().ToString("N")[..8];
-        var (law, _, lawId) = await host.RegisterProfessionalAsync("Lara", "Lawson", tag, "Lebanon");
-        var (health, _, _) = await host.RegisterProfessionalAsync("Hugo", "Healey", tag, "Lebanon");
-        await host.AddProfessionAsync(law, "Corporate Law", new() { ["city"] = tag, ["country"] = "Lebanon" });
-        await host.AddProfessionAsync(health, "Physiotherapy", new() { ["city"] = tag, ["country"] = "Lebanon" });
+        var (law, _, lawId) = await host.RegisterProfessionalAsync("Lara", "Lawson", tag, "LB");
+        var (health, _, _) = await host.RegisterProfessionalAsync("Hugo", "Healey", tag, "LB");
+        await host.AddProfessionAsync(law, "Corporate Law", new() { ["city"] = tag, ["country"] = "LB" });
+        await host.AddProfessionAsync(health, "Physiotherapy", new() { ["city"] = tag, ["country"] = "LB" });
         var (legalCat, legalSvc) = await host.ServiceAsync("Corporate Law");
 
         Assert.Equal(2, Total(await SearchAsync(host, $"city={tag}")));
@@ -362,7 +362,7 @@ public class SearchApiTests
         Assert.Equal(1, Total(await SearchAsync(host, $"city={tag}&serviceId={legalSvc}")));
         Assert.Equal(1, Total(await SearchAsync(host, $"city={tag}&firstName=ugo")));        // partial, case-insensitive
         Assert.Equal(1, Total(await SearchAsync(host, $"city={tag}&lastName=awso")));
-        Assert.True(Total(await SearchAsync(host, $"city={tag[..7]}&country=Lebanon")) >= 2);
+        Assert.True(Total(await SearchAsync(host, $"city={tag[..7]}&country=LB")) >= 2);
         var result = await SearchAsync(host, $"city={tag}&categoryId={legalCat}");
         Assert.Equal(lawId, result.GetProperty("items")[0].GetProperty("userId").GetInt64());
     }
@@ -383,8 +383,8 @@ public class SearchApiTests
     {
         await using var host = await ApiHost.StartAsync();
         var tag = "Flt" + Guid.NewGuid().ToString("N")[..8];
-        var (a, _, _) = await host.RegisterProfessionalAsync("Ann", "A", tag, sex: "female", dob: DateTime.UtcNow.AddYears(-30).AddDays(-10).ToString("yyyy-MM-dd"), nationality: "Lebanese");
-        var (b, _, _) = await host.RegisterProfessionalAsync("Bob", "B", tag, sex: "male", dob: DateTime.UtcNow.AddYears(-50).AddDays(-10).ToString("yyyy-MM-dd"), nationality: "French");
+        var (a, _, _) = await host.RegisterProfessionalAsync("Ann", "A", tag, sex: "female", dob: DateTime.UtcNow.AddYears(-30).AddDays(-10).ToString("yyyy-MM-dd"), nationality: "lebanese");
+        var (b, _, _) = await host.RegisterProfessionalAsync("Bob", "B", tag, sex: "male", dob: DateTime.UtcNow.AddYears(-50).AddDays(-10).ToString("yyyy-MM-dd"), nationality: "french");
         await host.AddProfessionAsync(a, extra: new() { ["city"] = tag, ["costPerHour"] = 20, ["yearsOfExperience"] = 2, ["hasTeam"] = false, ["hasOffice"] = false });
         await host.AddProfessionAsync(b, extra: new() { ["city"] = tag, ["costPerHour"] = 80, ["yearsOfExperience"] = 20, ["hasTeam"] = true, ["teamSize"] = 4, ["hasOffice"] = true, ["officeAddress"] = "X" });
 
@@ -399,7 +399,7 @@ public class SearchApiTests
         Assert.Equal(1, Total(await SearchAsync(host, $"city={tag}&sex=female")));
         Assert.Equal(1, Total(await SearchAsync(host, $"city={tag}&minAge=40")));
         Assert.Equal(1, Total(await SearchAsync(host, $"city={tag}&maxAge=40")));
-        Assert.Equal(1, Total(await SearchAsync(host, $"city={tag}&nationality=French")));
+        Assert.Equal(1, Total(await SearchAsync(host, $"city={tag}&nationality=french")));
     }
 
     [Fact]
@@ -482,7 +482,7 @@ public class SearchApiTests
     public async Task Nonsensical_search_filters_are_rejected()
     {
         await using var host = await ApiHost.StartAsync();
-        foreach (var query in new[] { "minAge=50&maxAge=20", "minCost=100&maxCost=10", "pageSize=500", "minStars=9", "sex=banana", "page=0" })
+        foreach (var query in new[] { "minAge=50&maxAge=20", "minCost=100&maxCost=10", "pageSize=500", "minStars=9", "page=0" })
         {
             var (status, body) = await host.NewClient().GetAsync("/api/professionals/search?" + query);
             Assert.Equal(HttpStatusCode.BadRequest, status);

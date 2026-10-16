@@ -52,7 +52,7 @@ BEGIN
   IF p_client_id = p_professional_id THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'CANNOT_BOOK_SELF';
   END IF;
-  IF p_duration_minutes IS NULL OR p_duration_minutes < 15 OR p_duration_minutes > 480 THEN
+  IF p_duration_minutes IS NULL OR p_duration_minutes < (SELECT CAST(value_text AS SIGNED) FROM app_settings WHERE setting_key = 'Booking.MinDurationMinutes') OR p_duration_minutes > (SELECT CAST(value_text AS SIGNED) FROM app_settings WHERE setting_key = 'Booking.MaxDurationMinutes') THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'INVALID_DURATION';
   END IF;
   IF p_starts_at IS NULL OR p_starts_at <= UTC_TIMESTAMP(3) THEN

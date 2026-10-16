@@ -35,7 +35,6 @@ export default function Home() {
             <Link className="btn small secondary" to="/me">My profile</Link>
             <Link className="btn small secondary" to="/appointments">Appointments</Link>
             {google && <a className="btn small secondary" href={googleLinkUrl("/")}>Link a Google account</a>}
-            {user.role === "admin" && <Link className="btn small" to="/admin">Back office</Link>}
           </div>
         </div>
       )}

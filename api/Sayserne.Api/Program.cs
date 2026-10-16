@@ -12,6 +12,9 @@ using Sayserne.Api.Auth;
 using Sayserne.Api.Data;
 using Sayserne.Api.Endpoints;
 using Sayserne.Api.Infrastructure;
+using Sayserne.Api.Platform;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 var app = AppFactory.Build(args);
 app.Run();
@@ -31,7 +34,8 @@ namespace Sayserne.Api
                 throw new InvalidOperationException("ConnectionStrings:Default is not configured. Set the ConnectionStrings__Default environment variable (see README).");
 
             var csb = new MySqlConnectionStringBuilder(connectionString) { DateTimeKind = MySqlDateTimeKind.Utc, AllowUserVariables = false };
-            builder.Services.AddSingleton(new MySqlDataSource(csb.ConnectionString));
+            // registered with a factory so the container owns the pool and disposes it (an instance registration would never be disposed)
+            builder.Services.AddSingleton(_ => new MySqlDataSource(csb.ConnectionString));
             builder.Services.AddSingleton<IStoredProcedureExecutor, StoredProcedureExecutor>();
             builder.Services.AddSingleton<IUserRepository, UserRepository>();
             builder.Services.AddSingleton<IIdentityRepository, IdentityRepository>();
@@ -40,12 +44,17 @@ namespace Sayserne.Api
             builder.Services.AddSingleton<IProfessionalRepository, ProfessionalRepository>();
             builder.Services.AddSingleton<IBookingRepository, BookingRepository>();
             builder.Services.AddSingleton<IMessagingRepository, MessagingRepository>();
+            builder.Services.AddSingleton<IPlatformRepository, PlatformRepository>();
+            builder.Services.AddSingleton<ITwoFactorRepository, TwoFactorRepository>();
+            // runtime settings: loaded at startup, refreshed after admin edits and periodically (other instances)
+            builder.Services.AddSingleton<ISettingsService>(sp => new SettingsService(sp.GetRequiredService<IStoredProcedureExecutor>(), sp.GetService<SettingOverrides>()));
+            builder.Services.AddHostedService<SettingsRefresher>();
 
             builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection("Auth"));
             builder.Services.Configure<GoogleOptions>(builder.Configuration.GetSection("Google"));
             var auth = builder.Configuration.GetSection("Auth").Get<AuthOptions>() ?? new AuthOptions();
 
-            builder.Services.AddSingleton(TimeProvider.System);
+            builder.Services.TryAddSingleton(TimeProvider.System);   // tests register their own clock first
             builder.Services.AddSingleton<IPasswordHasher>(new Pbkdf2PasswordHasher(auth.PasswordIterations));
             builder.Services.AddSingleton<DummyPasswordHash>();
             builder.Services.AddSingleton<ProtectedCookies>();
@@ -57,14 +66,15 @@ namespace Sayserne.Api
                 dp.PersistKeysToFileSystem(new DirectoryInfo(keysPath));   // share this folder across instances
 
             builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+                .AddCookie(AdminAuth.Scheme, o => AdminAuth.ConfigureCookie(o, builder.Environment.IsDevelopment()))
                 .AddCookie(o =>
                 {
                     o.Cookie.Name = "sayserne.auth";
                     o.Cookie.HttpOnly = true;
                     o.Cookie.SameSite = SameSiteMode.Lax;
                     o.Cookie.SecurePolicy = builder.Environment.IsDevelopment() ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
-                    o.ExpireTimeSpan = TimeSpan.FromHours(auth.SessionHours);
-                    o.SlidingExpiration = true;
+                    o.ExpireTimeSpan = TimeSpan.FromDays(30);   // upper bound only; each sign-in sets its own expiry from the Auth.SessionHours setting
+                    o.SlidingExpiration = false;
                     o.Events.OnRedirectToLogin = c => { c.Response.StatusCode = StatusCodes.Status401Unauthorized; return Task.CompletedTask; };
                     o.Events.OnRedirectToAccessDenied = c => { c.Response.StatusCode = StatusCodes.Status403Forbidden; return Task.CompletedTask; };
                     // Re-check the account on every request: locking a user or changing a role takes effect immediately.
@@ -80,25 +90,37 @@ namespace Sayserne.Api
                         }
                     };
                 });
+            // Back office: a separate cookie scheme; each route asks for one permission ("perm:<code>" policies are built on demand).
             builder.Services.AddAuthorizationBuilder()
-                .AddPolicy(AdminEndpoints.PolicyName, p => p.RequireAuthenticatedUser().RequireRole(AuthSession.RoleAdmin));
+                .AddPolicy(PermissionExtensions.StaffPolicy, p => p.AddAuthenticationSchemes(AdminAuth.Scheme).RequireAuthenticatedUser());
+            builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
+            builder.Services.AddSingleton<IAuthorizationHandler, PermissionHandler>();
 
             builder.Services.AddRateLimiter(o =>
             {
                 o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-                o.AddPolicy("auth", ctx => RateLimitPartition.GetFixedWindowLimiter(
-                    ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                    _ => new FixedWindowRateLimiterOptions { PermitLimit = auth.AuthRequestsPerMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+                // limits come from the admin-editable settings; the partition key carries the settings version so an edit applies to new windows
+                o.AddPolicy("auth", ctx =>
+                {
+                    var settings = ctx.RequestServices.GetRequiredService<ISettingsService>();
+                    return RateLimitPartition.GetFixedWindowLimiter($"{ctx.Connection.RemoteIpAddress}|{settings.Version}",
+                        _ => new FixedWindowRateLimiterOptions { PermitLimit = settings.GetInt("Auth.AuthRequestsPerMinute"), Window = TimeSpan.FromMinutes(1), QueueLimit = 0 });
+                });
                 // writes (profile edits, bookings, chat messages, alerts): limited per signed-in user, falling back to the client IP
-                o.AddPolicy(MarketplaceEndpoints.WriteLimiter, ctx => RateLimitPartition.GetFixedWindowLimiter(
-                    AuthSession.CurrentUserId(ctx.User)?.ToString() ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                    _ => new FixedWindowRateLimiterOptions { PermitLimit = auth.WritesPerMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+                o.AddPolicy(MarketplaceEndpoints.WriteLimiter, ctx =>
+                {
+                    var settings = ctx.RequestServices.GetRequiredService<ISettingsService>();
+                    return RateLimitPartition.GetFixedWindowLimiter(
+                        $"{AuthSession.CurrentUserId(ctx.User)?.ToString() ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown"}|{settings.Version}",
+                        _ => new FixedWindowRateLimiterOptions { PermitLimit = settings.GetInt("Auth.WritesPerMinute"), Window = TimeSpan.FromMinutes(1), QueueLimit = 0 });
+                });
             });
 
             builder.Services.ConfigureHttpJsonOptions(o =>
                 o.SerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull);
 
             var app = builder.Build();
+            app.Services.GetRequiredService<ISettingsService>().RefreshAsync().GetAwaiter().GetResult();   // fail fast if the database is not migrated
 
             if (app.Configuration.GetValue<bool>("Proxy:TrustForwardedHeaders"))
             {
@@ -117,8 +139,11 @@ namespace Sayserne.Api
 
             app.MapAuth();
             app.MapGoogle();
+            app.MapAdminAuth();
             app.MapAdmin();
+            app.MapAdminPlatform();
             app.MapMarketplace();
+            app.MapPublicConfig();
             return app;
         }
     }

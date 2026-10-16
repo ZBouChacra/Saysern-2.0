@@ -10,7 +10,7 @@ namespace Sayserne.Tests;
 public class SqlGuardTests
 {
     private static readonly Regex SqlText = new(
-        @"\b(select\b[^;""]{0,200}\bfrom\b|insert\s+into|update\s+\w+\s+set|delete\s+from|create\s+(table|procedure|database|user|index)|drop\s+(table|procedure|database|user)|alter\s+table|truncate\s+table|grant\s+\w+\s+on)\b",
+        @"\b(select\s+(distinct\s+)?[\w\*\.,`\s\(\)]{1,200}?\s+from\s+[\w`\[(]|insert\s+into|update\s+\w+\s+set|delete\s+from|create\s+(table|procedure|database|user|index)|drop\s+(table|procedure|database|user)|alter\s+table|truncate\s+table|grant\s+\w+\s+on)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly string[] ForbiddenEverywhere =
@@ -83,6 +83,8 @@ public class SqlGuardTests
         Assert.True(FindViolations("ctx.Users.FromSqlRaw(x)").Count > 0);
         Assert.True(FindViolations("class C : DbContext {}").Count > 0);
         Assert.Equal(0, FindViolations("db.ExecuteAsync(\"sp_users_get_by_id\", args); // select the user from the cache").Count);
+        // C# that merely looks like SQL (LINQ Select ... From) must not be flagged
+        Assert.Equal(0, FindViolations("var rows = result.Items.Select(AdminUserDto.From).ToList(); var x = items.Select(r => r.From);").Count);
         Assert.Equal(0, FindViolations("var u = \"https://accounts.google.com\"; /* delete from the list */").Count);
         // SQL hidden after something that merely looks like a comment inside a string must still be caught
         Assert.True(FindViolations("var q = \"a//b\" + \"SELECT * FROM users\";").Count > 0);

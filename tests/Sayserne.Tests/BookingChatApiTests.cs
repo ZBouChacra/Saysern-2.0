@@ -679,20 +679,3 @@ public class AlertApiTests
         Assert.Equal("ALERT_LIMIT", TestClient.Error(body));
     }
 }
-
-public class AdminFlagsApiTests
-{
-    [Fact]
-    public async Task Only_admins_can_set_listing_flags()
-    {
-        await using var host = await ApiHost.StartAsync();
-        var (user, _, id) = await host.RegisterAsync();
-        Assert.Equal(HttpStatusCode.Unauthorized, (await host.NewClient().PostAsync($"/api/admin/users/{id}/flags", new { isPremium = true, isStarred = true })).Status);
-        Assert.Equal(HttpStatusCode.Forbidden, (await user.PostAsync($"/api/admin/users/{id}/flags", new { isPremium = true, isStarred = true })).Status);
-        var (admin, _, _) = await host.CreateAdminAsync();
-        var (status, body) = await admin.PostAsync($"/api/admin/users/{id}/flags", new { isPremium = true, isStarred = false });
-        Assert.Equal(HttpStatusCode.OK, status);
-        Assert.True(body.GetProperty("user").GetProperty("isPremium").GetBoolean());
-        Assert.Equal(HttpStatusCode.NotFound, (await admin.PostAsync("/api/admin/users/99999999/flags", new { isPremium = true, isStarred = true })).Status);
-    }
-}

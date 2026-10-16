@@ -2,12 +2,15 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, errorMessage, type Eligible, type ProfessionalPage, type ReviewItem } from "../api";
 import { useAuth } from "../auth";
-import { DAYS, Stars, fullName, money, when } from "../components";
+import { Stars, fullName, money, useWeekdays, when } from "../components";
+import { useLookup } from "../config";
 
 export default function Professional() {
   const { id } = useParams();
   const userId = Number(id);
   const { user } = useAuth();
+  const { dayName } = useWeekdays();
+  const countries = useLookup("country");
   const navigate = useNavigate();
   const [page, setPage] = useState<ProfessionalPage | null>(null);
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
@@ -39,7 +42,7 @@ export default function Professional() {
           <div className="avatar big">{profile.firstName[0]}</div>
           <div>
             <h1>{fullName(profile.firstName, profile.lastName)}</h1>
-            <div className="muted">{[profile.city, profile.country].filter(Boolean).join(", ")}{profile.age ? ` · ${profile.age} yrs` : ""}</div>
+            <div className="muted">{[profile.city, countries.label(profile.country)].filter(Boolean).join(", ")}{profile.age ? ` · ${profile.age} yrs` : ""}</div>
             {profile.isPremium && <span className="pill ok">premium</span>} {profile.isStarred && <span className="pill">★ featured</span>}
           </div>
         </div>
@@ -68,7 +71,7 @@ export default function Professional() {
             {p.website && <a href={p.website} target="_blank" rel="noopener noreferrer">Website</a>}
             <div className="muted small">
               {availability.filter(a => a.professionId === p.id || a.professionId === undefined).length === 0 ? "No availability listed." :
-                availability.filter(a => a.professionId === p.id || a.professionId === undefined).map(a => `${DAYS[a.dayOfWeek].slice(0, 3)} ${a.startTime}–${a.endTime}`).join(" · ")}
+                availability.filter(a => a.professionId === p.id || a.professionId === undefined).map(a => `${dayName(a.dayOfWeek).slice(0, 3)} ${a.startTime}–${a.endTime}`).join(" · ")}
             </div>
           </div>
         ))}

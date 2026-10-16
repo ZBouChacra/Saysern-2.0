@@ -7,6 +7,7 @@ using Sayserne.Migrator;
 //   provision                env SAYSERNE_ADMIN_CONNECTION, SAYSERNE_DB_NAME, SAYSERNE_MIGRATOR_USER/_PASSWORD,
 //                            SAYSERNE_APP_USER/_PASSWORD, optional SAYSERNE_USER_HOST (default localhost)
 //   promote-admin <email>    env SAYSERNE_MIGRATOR_CONNECTION
+//   reset-2fa <email>        env SAYSERNE_MIGRATOR_CONNECTION   (break-glass: clears two-factor so the admin enrolls again at next sign-in)
 // Optional: --db-dir <path>
 
 static string Env(string name) =>
@@ -58,8 +59,19 @@ try
             Console.WriteLine($"{email} is now an admin.");
             return 0;
         }
+        case "reset-2fa":
+        {
+            var email = argv.Count > 1 ? argv[1] : throw new ArgumentException("Usage: reset-2fa <email>");
+            await using var conn = new MySqlConnection(Env("SAYSERNE_MIGRATOR_CONNECTION"));
+            await conn.OpenAsync();
+            await using var cmd = new MySqlCommand("sp_twofactor_reset_by_email", conn) { CommandType = CommandType.StoredProcedure };
+            cmd.Parameters.AddWithValue("p_email", email.Trim());
+            await cmd.ExecuteNonQueryAsync();
+            Console.WriteLine($"Two-factor sign-in cleared for {email}. They will set it up again at their next back-office sign-in.");
+            return 0;
+        }
         default:
-            Console.Error.WriteLine("Commands: migrate | provision | deprovision | promote-admin <email>   (optional: --db-dir <path>)");
+            Console.Error.WriteLine("Commands: migrate | provision | deprovision | promote-admin <email> | reset-2fa <email>   (optional: --db-dir <path>)");
             return 2;
     }
 }

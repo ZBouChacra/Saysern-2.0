@@ -68,7 +68,7 @@ public sealed class CatalogRepository(IStoredProcedureExecutor db) : ICatalogRep
         db.QueryAsync("sp_catalog_services_list", new ProcParams().Add("p_category_id", categoryId).Add("p_only_active", onlyActive), MarketplaceMappers.Service, ct);
 }
 
-public sealed class ProfessionalRepository(IStoredProcedureExecutor db) : IProfessionalRepository
+public sealed class ProfessionalRepository(IStoredProcedureExecutor db, Platform.ISettingsService settings) : IProfessionalRepository
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -119,7 +119,7 @@ public sealed class ProfessionalRepository(IStoredProcedureExecutor db) : IProfe
     public async Task<PagedResult<ProfessionalListing>> SearchAsync(SearchFilters f, CancellationToken ct = default)
     {
         var page = Math.Max(f.Page ?? 1, 1);
-        var size = Math.Clamp(f.PageSize ?? 20, 1, 50);
+        var size = Math.Clamp(f.PageSize ?? settings.GetInt("Search.DefaultPageSize"), 1, settings.GetInt("Search.MaxPageSize"));
         var (rows, totals) = await db.QueryTwoAsync("sp_professionals_search",
             new ProcParams().Add("p_category_id", f.CategoryId).Add("p_service_id", f.ServiceId).Add("p_first_name", f.FirstName).Add("p_last_name", f.LastName)
                 .Add("p_sex", f.Sex).Add("p_min_age", f.MinAge).Add("p_max_age", f.MaxAge).Add("p_nationality", f.Nationality).Add("p_country", f.Country)
@@ -131,7 +131,7 @@ public sealed class ProfessionalRepository(IStoredProcedureExecutor db) : IProfe
     }
 
     public Task<IReadOnlyList<ProfessionalListing>> TopAsync(int limit, CancellationToken ct = default) =>
-        db.QueryAsync("sp_professionals_top", new ProcParams().Add("p_limit", Math.Clamp(limit, 1, 50)), MarketplaceMappers.Listing, ct);
+        db.QueryAsync("sp_professionals_top", new ProcParams().Add("p_limit", Math.Clamp(limit, 1, settings.GetInt("Search.MaxPageSize"))), MarketplaceMappers.Listing, ct);
 
     private static string Areas(ProfessionValues v) => JsonSerializer.Serialize(v.GeographicAreas, Json);
 }

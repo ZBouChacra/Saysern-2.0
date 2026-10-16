@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Sayserne.Api.Auth;
 using Sayserne.Api.Data;
 using Sayserne.Api.Infrastructure;
+using Sayserne.Api.Platform;
 
 namespace Sayserne.Api.Endpoints;
 
@@ -34,8 +35,8 @@ public static class MarketplaceEndpoints
 
         g.MapGet("/top", (IProfessionalRepository repo, int? limit) => repo.TopAsync(limit ?? 5));
 
-        g.MapGet("/search", async (IProfessionalRepository repo, [AsParameters] SearchFilters filters) =>
-            Results.Ok(await repo.SearchAsync(MarketplaceValidation.ValidateSearch(filters))));
+        g.MapGet("/search", async (IProfessionalRepository repo, ISettingsService settings, [AsParameters] SearchFilters filters) =>
+            Results.Ok(await repo.SearchAsync(MarketplaceValidation.ValidateSearch(filters, settings))));
 
         g.MapGet("/{userId:long}", async (long userId, IProfessionalRepository repo) =>
         {
@@ -65,21 +66,21 @@ public static class MarketplaceEndpoints
         g.MapGet("/profile", async (HttpContext ctx, IProfessionalRepository repo) =>
             Results.Ok(await repo.GetPrivateProfileAsync(ctx.UserId()) ?? throw new AppException("USER_NOT_FOUND")));
 
-        g.MapPut("/profile", async (HttpContext ctx, ProfileInput input, IProfessionalRepository repo) =>
-            Results.Ok(await repo.UpdateProfileAsync(ctx.UserId(), MarketplaceValidation.ValidateProfile(input))));
+        g.MapPut("/profile", async (HttpContext ctx, ProfileInput input, IProfessionalRepository repo, ISettingsService settings) =>
+            Results.Ok(await repo.UpdateProfileAsync(ctx.UserId(), MarketplaceValidation.ValidateProfile(input, settings))));
 
         g.MapGet("/professions", async (HttpContext ctx, IProfessionalRepository repo) => Results.Ok(await repo.ListProfessionsAsync(ctx.UserId(), publicOnly: false)));
 
-        g.MapPost("/professions", async (HttpContext ctx, ProfessionInput input, IProfessionalRepository repo) =>
+        g.MapPost("/professions", async (HttpContext ctx, ProfessionInput input, IProfessionalRepository repo, ISettingsService settings) =>
         {
-            var (categoryId, serviceId, values, _) = MarketplaceValidation.ValidateProfession(input, requireIds: true);
+            var (categoryId, serviceId, values, _) = MarketplaceValidation.ValidateProfession(input, requireIds: true, settings);
             var created = await repo.CreateProfessionAsync(ctx.UserId(), categoryId, serviceId, values);
             return Results.Json(created, statusCode: StatusCodes.Status201Created);
         });
 
-        g.MapPut("/professions/{id:long}", async (HttpContext ctx, long id, ProfessionInput input, IProfessionalRepository repo) =>
+        g.MapPut("/professions/{id:long}", async (HttpContext ctx, long id, ProfessionInput input, IProfessionalRepository repo, ISettingsService settings) =>
         {
-            var (_, _, values, hidden) = MarketplaceValidation.ValidateProfession(input, requireIds: false);
+            var (_, _, values, hidden) = MarketplaceValidation.ValidateProfession(input, requireIds: false, settings);
             return Results.Ok(await repo.UpdateProfessionAsync(ctx.UserId(), id, values, hidden));
         });
 
@@ -103,9 +104,9 @@ public static class MarketplaceEndpoints
     {
         var g = app.MapGroup("/api/appointments").RequireAuthorization().RequireRateLimiting(WriteLimiter);
 
-        g.MapPost("", async (HttpContext ctx, BookingInput input, IBookingRepository bookings) =>
+        g.MapPost("", async (HttpContext ctx, BookingInput input, IBookingRepository bookings, ISettingsService settings) =>
         {
-            var (start, duration, description) = MarketplaceValidation.ValidateBooking(input);
+            var (start, duration, description) = MarketplaceValidation.ValidateBooking(input, settings);
             var created = await bookings.CreateAppointmentAsync(ctx.UserId(), input.ProfessionalId!.Value, input.ProfessionId, start, duration, description);
             return Results.Json(created, statusCode: StatusCodes.Status201Created);
         });
@@ -120,13 +121,14 @@ public static class MarketplaceEndpoints
         r.MapGet("/eligible", async (HttpContext ctx, IBookingRepository bookings, long professionalId) =>
             Results.Ok(await bookings.EligibleAsync(ctx.UserId(), professionalId)));
 
-        r.MapPost("", async (HttpContext ctx, ReviewInput input, IBookingRepository bookings) =>
+        r.MapPost("", async (HttpContext ctx, ReviewInput input, IBookingRepository bookings, ISettingsService settings) =>
         {
             var errors = new Dictionary<string, string>();
             if (input.AppointmentId is null or <= 0) errors["appointmentId"] = "Required.";
             if (input.Rating is null or < 1 or > 5) errors["rating"] = "Between 1 and 5.";
             var comment = input.Comment?.Trim();
-            if (comment?.Length > 2000) errors["comment"] = "At most 2000 characters.";
+            var maxComment = settings.GetInt("Reviews.MaxCommentLength");
+            if (comment?.Length > maxComment) errors["comment"] = $"At most {maxComment} characters.";
             if (errors.Count > 0) throw new AppException("VALIDATION_FAILED", 400, fieldErrors: errors);
             var created = await bookings.CreateReviewAsync(ctx.UserId(), input.AppointmentId!.Value, input.Rating!.Value, string.IsNullOrEmpty(comment) ? null : comment);
             return Results.Json(created, statusCode: StatusCodes.Status201Created);
@@ -149,9 +151,9 @@ public static class MarketplaceEndpoints
         g.MapGet("/rooms/{roomId:long}/messages", async (HttpContext ctx, long roomId, IMessagingRepository chat, int? limit, int? offset) =>
             Results.Ok(await chat.MessagesAsync(ctx.UserId(), roomId, limit ?? 50, offset ?? 0)));
 
-        g.MapPost("/rooms/{roomId:long}/messages", async (HttpContext ctx, long roomId, SendMessageInput input, IMessagingRepository chat) =>
+        g.MapPost("/rooms/{roomId:long}/messages", async (HttpContext ctx, long roomId, SendMessageInput input, IMessagingRepository chat, ISettingsService settings) =>
         {
-            var (type, content, lat, lng) = MarketplaceValidation.ValidateMessage(input);
+            var (type, content, lat, lng) = MarketplaceValidation.ValidateMessage(input, settings);
             return Results.Json(await chat.SendAsync(ctx.UserId(), roomId, type, content, lat, lng), statusCode: StatusCodes.Status201Created);
         });
 
@@ -165,9 +167,9 @@ public static class MarketplaceEndpoints
 
         g.MapGet("", async (HttpContext ctx, IMessagingRepository repo) => Results.Ok(await repo.AlertsAsync(ctx.UserId())));
 
-        g.MapPost("", async (HttpContext ctx, AlertInput input, IMessagingRepository repo) =>
+        g.MapPost("", async (HttpContext ctx, AlertInput input, IMessagingRepository repo, ISettingsService settings) =>
         {
-            var (name, criteria, frequency) = MarketplaceValidation.ValidateAlert(input);
+            var (name, criteria, frequency) = MarketplaceValidation.ValidateAlert(input, settings);
             return Results.Json(await repo.CreateAlertAsync(ctx.UserId(), name, criteria, frequency), statusCode: StatusCodes.Status201Created);
         });
 

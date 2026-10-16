@@ -2,17 +2,15 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Sayserne.Api.Data;
+using Sayserne.Api.Platform;
 
 namespace Sayserne.Api.Auth;
 
+/// <summary>Deploy-time authentication settings. Everything an admin may tune (lockout, session length, rate limits, password rules) lives in the database settings instead.</summary>
 public sealed class AuthOptions
 {
+    /// <summary>PBKDF2 cost. Deploy-time on purpose: it must match the hardware, and old hashes record their own cost.</summary>
     public int PasswordIterations { get; set; } = 600_000;
-    public int MaxFailedAttempts { get; set; } = 5;
-    public int LockoutMinutes { get; set; } = 15;
-    public int SessionHours { get; set; } = 8;
-    public int AuthRequestsPerMinute { get; set; } = 30;
-    public int WritesPerMinute { get; set; } = 120;
 }
 
 public static class AuthSession
@@ -28,7 +26,10 @@ public static class AuthSession
             new Claim(ClaimTypes.Name, $"{user.FirstName} {user.LastName}".Trim()),
             new Claim(ClaimTypes.Role, user.Role),
         ], CookieAuthenticationDefaults.AuthenticationScheme);
-        return ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
+        var settings = ctx.RequestServices.GetRequiredService<ISettingsService>();
+        var clock = ctx.RequestServices.GetRequiredService<TimeProvider>();
+        return ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity),
+            new AuthenticationProperties { IsPersistent = false, ExpiresUtc = clock.GetUtcNow().AddHours(settings.GetInt("Auth.SessionHours")) });
     }
 
     public static long? CurrentUserId(ClaimsPrincipal principal) =>

@@ -10,7 +10,7 @@ namespace Sayserne.Api.Infrastructure;
 public sealed class CsrfMiddleware(RequestDelegate next, IConfiguration config)
 {
     public const string HeaderName = "X-Requested-With";
-    private readonly string[] _allowed = config.GetSection("Web:AllowedOrigins").Get<string[]>() ?? [];
+    private readonly string[] _allowed = [.. config.GetSection("Web:AllowedOrigins").Get<string[]>() ?? [], .. config.GetSection("Admin:AllowedOrigins").Get<string[]>() ?? []];
 
     public async Task InvokeAsync(HttpContext ctx)
     {

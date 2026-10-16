@@ -4,19 +4,20 @@ A Lebanese professional-services marketplace, refactored into:
 
 | Tier | Technology | Responsibility |
 |---|---|---|
-| **Web** (`web/`) | TypeScript · React 19 · Vite | User interface only. Talks to the API over `/api`; never to the database or to Google directly. |
-| **Application / back office** (`api/Sayserne.Api`) | C# · ASP.NET Core (.NET 10) | API endpoints, business rules, authentication, authorisation, admin functions. |
+| **Web** (`web/`) | TypeScript · React 19 · Vite | The public site (visitors, customers, professionals). Talks to the API over `/api`; never to the database or to Google directly. Contains **no hard-coded lists or limits**: it loads settings, lookups and texts from the API. |
+| **Back office** (`admin/`) | TypeScript · React 19 · Vite | A **separate web app** for staff: users, roles, settings, lookups, texts, catalog, audit log. Own build, own host, same API and database. |
+| **Application** (`api/Sayserne.Api`) | C# · ASP.NET Core (.NET 10) | API endpoints, business rules, authentication, authorisation, the back-office API. |
 | **Database** (`db/`) | MySQL 8 | Tables and **stored procedures**, versioned as migrations. |
 
 ```
-Browser ──/api──▶ ASP.NET Core API ──CALL sp_*()──▶ MySQL 8
-   ▲                  │  cookie session, CSRF check, rate limits
-   │                  └─ Google OIDC (server-side code exchange + ID-token validation)
- React/Vite (web/)
+Visitors ──▶ web/  ──/api──┐
+                            ├─▶ ASP.NET Core API ──CALL sp_*()──▶ MySQL 8
+Staff    ──▶ admin/ ─/api──┘      │  cookie sessions (separate for staff), CSRF check, rate limits
+ (password + authenticator)       └─ Google OIDC (public site only)
 ```
 
-> **Status: Phases 1 and 2 of 4 done.** Foundation, authentication and admin users (phase 1), and the **core marketplace** (phase 2): catalog, professional profiles and listings, availability, search, booking, reviews, chat and saved searches — all working end to end through the web app.
-> Not ported yet: back-office management of the catalog, reviews, ads, premium/fees, payments, contact messages and site config (phase 3), image uploads and chat media, e-mail notifications, and the OpenAPI-generated client (phase 4). The mobile app is out of scope for this refactor.
+> **Status: phases 1, 2 and 3a done.** Foundation and authentication (1), the core marketplace (2), and the **configuration platform** (3a): runtime settings, lookups, translated texts, audit log, roles and permissions, two-factor back-office sign-in, user/catalog management — in a separate admin app.
+> Not built yet: ads, premium listings, fees and payments, file storage, e-mail and notifications (3b); contact messages, review and chat moderation, dashboard, About/Contact/legal content (3c); Arabic and right-to-left screens, theme and Settings page, image uploads in the screens, marketing sections, account disabling (4). The mobile app comes after the web application.
 
 ---
 
@@ -81,19 +82,33 @@ npm install
 npm run dev           # http://localhost:5173  (proxies /api to :5080)
 ```
 
-Open <http://localhost:5173>, register an account, and sign in. A starter catalog (7 categories, 15 services) is created by migration `V004`; it is placeholder data until the back office (phase 3) can edit it.
+Open <http://localhost:5173>, register an account, and sign in. A starter catalog (7 categories, 15 services) is created by migration `V004`; it is placeholder data — replace it in the back office (**Catalog**).
 
 To try the marketplace: open **Profile**, set "I am a" to *professional*, add a service, then use a second browser (or private window) as a client to search, book, message and review.
 
-### 5. Make yourself an admin
+### 5. Run the back office
 
-There is deliberately no public way to become an admin. After registering:
+```powershell
+cd admin
+npm install
+npm run dev           # http://localhost:5174  (proxies /api to :5080)
+```
+
+### 6. Make yourself a super admin
+
+There is deliberately no public way to become an admin. Register on the public site, then:
 
 ```powershell
 dotnet run --project api/Sayserne.Migrator -- promote-admin you@example.com   # needs SAYSERNE_MIGRATOR_CONNECTION
 ```
 
-Sign in again (existing sessions don't carry the new role). A **Back office** link appears; admins can search users, lock/unlock them and change roles.
+Open the **back office** (<http://localhost:5174>), sign in with your email and password, and you are taken through **authenticator setup** (scan the QR code with Google Authenticator, Microsoft Authenticator, Authy or 1Password, then confirm a code). You are shown **10 one-time recovery codes** — store them somewhere safe. Every later sign-in needs password + a code.
+
+If every admin loses their device *and* recovery codes, the break-glass command clears two-factor so the admin can enrol again:
+
+```powershell
+dotnet run --project api/Sayserne.Migrator -- reset-2fa you@example.com
+```
 
 ---
 
@@ -186,18 +201,27 @@ db/setup/provision.sql / deprovision.sql   database + the two accounts (template
 
 ## Authentication and authorisation
 
-* **Registration** (`POST /api/auth/register`): validated server-side (email format, 10–128-char password with a letter and a digit, names). Passwords are hashed with **PBKDF2-HMAC-SHA256** (600 000 iterations, random 128-bit salt, constant-time compare). Duplicate email → `409`.
-* **Login** (`POST /api/auth/login`): same error for unknown email and wrong password, with a dummy hash verified for unknown emails to even out timing. **5 failures lock the account for 15 minutes** (counted in the database).
-* **Session:** ASP.NET Core cookie auth — `HttpOnly`, `SameSite=Lax`, `Secure` outside Development, 8 h sliding. On **every request** the account is re-read: locking a user or changing their role takes effect immediately and ends stale sessions.
-* **CSRF:** state-changing `/api` requests must come from an allowed origin (same origin or `Web:AllowedOrigins`), or, if the browser sent no `Origin`, carry the `X-Requested-With` header that cross-site forms cannot set. `SameSite=Lax` is a second layer.
-* **Rate limiting:** auth endpoints are limited per client IP (30/min default).
-* **Authorisation:** every `/api/admin/*` route requires the `AdminOnly` policy (authenticated **and** role `admin`). Anonymous → `401`, regular user → `403`. Admins cannot lock or demote themselves, and the **last active admin can never be locked or demoted** (enforced inside the stored procedures, under a row lock).
-* **Open redirects:** post-login return URLs must be local paths.
-* Responses never include password hashes; they use a separate `UserDto`.
+**Public site (customers and professionals)**
+
+* **Registration** (`POST /api/auth/register`): validated server-side. The password rules (minimum length, letter, digit) are **runtime settings** (`Auth.PasswordMinLength` ≥ 8, `Auth.PasswordRequireLetter`, `Auth.PasswordRequireDigit`) and apply to form accounts only — Google sign-in is unaffected. Passwords are hashed with **PBKDF2-HMAC-SHA256** (600 000 iterations — a deploy-time setting — random 128-bit salt, constant-time compare). Duplicate email → `409`.
+* **Login:** same error for unknown email and wrong password, with a dummy hash verified for unknown emails to even out timing. After `Auth.MaxFailedAttempts` failures the account is locked for `Auth.LockoutMinutes` (counted in the database).
+* **Session:** ASP.NET Core cookie — `HttpOnly`, `SameSite=Lax`, `Secure` outside Development, **fixed length** `Auth.SessionHours` (not sliding). On **every request** the account is re-read: locking a user takes effect immediately.
+* **CSRF:** state-changing `/api` requests must come from an allowed origin (same origin, `Web:AllowedOrigins` or `Admin:AllowedOrigins`), or, if the browser sent no `Origin`, carry the `X-Requested-With` header that cross-site forms cannot set.
+* **Rate limiting:** auth endpoints per client IP (`Auth.AuthRequestsPerMinute`), writes per user (`Auth.WritesPerMinute`). Changing the setting applies to new windows.
+
+**Back office (staff)** — a different door, on purpose
+
+* **Separate session.** The admin cookie (`sayserne.admin`, `HttpOnly`, **`SameSite=Strict`**) only exists after **password + second factor**. A website session is never accepted by `/api/admin/*`, and an admin session is never accepted by the public API. A super admin who signs in to the *website* gets no back-office powers there.
+* **Two-factor (TOTP, RFC 6238):** works with any authenticator app. First sign-in forces enrolment; the secret is stored encrypted (ASP.NET Data Protection); a code can be used **once** (replay is refused by the database, even under a race); 10 single-use **recovery codes** (only hashes stored) can be regenerated with a current code. An enrolled account cannot be re-enrolled by someone who only has the password.
+* **Stricter limits:** `Auth.AdminMaxFailedAttempts` (3) / `Auth.AdminLockoutMinutes` (30), idle timeout `Auth.AdminIdleMinutes` (30; activity keeps the session alive) and an absolute `Auth.AdminMaxSessionHours` (12). Customers, role-less users and Google-only accounts get exactly the same answer as a wrong password.
+* **Permissions, not a single "admin" flag.** Each route names one permission (`users.read`, `users.manage`, `admins.manage`, `roles.manage`, `settings.read`/`manage`, `lookups.manage`, `translations.manage`, `catalog.manage`, `audit.read`). **Roles are data**: create them and assign them in the back office. A **super admin** holds every permission. Permissions are re-read on **every request**, so removing one (or the role, or the account) takes effect at once.
+* **Safety rails:** nobody can lock, demote, re-role or reset the two-factor of themselves; the **last active super admin** can never be locked or demoted (enforced inside the stored procedures, under a row lock); another super admin can reset a colleague's two-factor (lost device).
+* **Audit log:** every back-office change (who, what, when, old → new where relevant) is written **in the same database transaction as the change**, so a change cannot happen without its record. The API's database account can neither read nor edit nor delete the table directly, and no endpoint changes entries.
+* **Open redirects:** post-login return URLs must be local paths. Responses never include password hashes.
 
 ### API summary
 
-Authentication and admin (phase 1):
+Authentication (public site):
 
 | Method & path | Access | Notes |
 |---|---|---|
@@ -208,10 +232,27 @@ Authentication and admin (phase 1):
 | `GET /api/auth/google/start` | public (`?mode=link` needs a session) | Redirect to Google. |
 | `GET /api/auth/google/callback` | public | OAuth redirect target. |
 | `POST /api/auth/google/link-pending` | pending-link cookie + password | |
-| `GET /api/admin/users?search&page&pageSize` | **admin** | |
-| `POST /api/admin/users/{id}/lock` · `/role` · `/flags` | **admin** | `/flags` sets premium / starred (search ranking). |
+| `GET /api/config/public` | public | Settings flagged public, typed (password rules, limits…). Cached 10 s. |
+| `GET /api/lookups/{type}?parent=` | public | Active values with a name per language (e.g. `country`, `city?parent=LB`, `nationality`, `weekday`). Cached 60 s. |
+| `GET /api/translations/{language}` | public | UI texts, falling back to the default language. Cached 60 s. |
 
-Marketplace (phase 2). Public unless noted; every write is rate-limited per user (`Auth:WritesPerMinute`):
+Back office (phase 3a). **Separate session** (password + authenticator); each route needs the permission shown:
+
+| Method & path | Permission | Notes |
+|---|---|---|
+| `POST /api/admin/auth/login` → `/2fa/enroll` → `/2fa/confirm` · `/verify` · `/logout`, `GET /me`, `POST /recovery-codes/regenerate` | none → staff session | Sign-in steps; `verify` takes an authenticator `code` or a one-time `recoveryCode`. |
+| `GET /api/admin/users?search&page&pageSize` | `users.read` | With role names and whether two-factor is on. |
+| `POST /api/admin/users/{id}/lock` · `/flags` | `users.manage` | `/flags` sets premium / starred (search ranking). |
+| `POST /api/admin/users/{id}/role` · `/two-factor/reset` | `admins.manage` | Super-admin flag; lost-device reset. |
+| `PUT /api/admin/users/{id}/roles` | `roles.manage` | Replace the user's roles. |
+| `GET·POST /api/admin/roles`, `PUT·DELETE /api/admin/roles/{id}`, `GET /api/admin/permissions` | `roles.manage` | Roles are data; permissions are fixed by the code. |
+| `GET /api/admin/settings` · `PUT /{key}` · `POST /{key}/reset` | `settings.read` · `settings.manage` | Validated against type, limits and related settings. |
+| `GET /api/admin/lookups/types`, `PUT …/types/{code}`, `GET …/{type}/values`, `PUT …/{type}/values/{code}` | `lookups.manage` | Create/edit values and their translations; deactivate, never delete. |
+| `GET /api/admin/translations`, `PUT …/{language}/{key}`, `POST …/{language}/{key}/reset` | `translations.manage` | |
+| `GET /api/admin/catalog/categories` · `/services`, `POST·PUT` both | `catalog.manage` | Includes blocked entries. |
+| `GET /api/admin/audit?from&to&actorId&action&entityType&search&page` | `audit.read` | Read-only. |
+
+Marketplace (phase 2). Public unless noted; every write is rate-limited per user (setting `Auth.WritesPerMinute`):
 
 | Method & path | Access | Notes |
 |---|---|---|
@@ -226,31 +267,50 @@ Marketplace (phase 2). Public unless noted; every write is rate-limited per user
 | `POST /api/appointments`, `GET /api/appointments`, `POST /api/appointments/{id}/status` | session | Booking and the state machine below. |
 | `GET /api/reviews/eligible?professionalId=`, `POST /api/reviews` | session | Review a completed appointment, once. |
 | `GET·POST /api/chat/rooms`, `GET·POST /api/chat/rooms/{id}/messages`, `GET /api/chat/unread-count` | session | Text and location messages; membership enforced. |
-| `GET·POST /api/alerts`, `DELETE /api/alerts/{id}`, `GET /api/alerts/{id}/run` | session | Saved searches (max 20). |
+| `GET·POST /api/alerts`, `DELETE /api/alerts/{id}`, `GET /api/alerts/{id}/run` | session | Saved searches (limit: `Alerts.MaxPerUser`). |
 
 **Booking state machine** (enforced inside the stored procedure `sp_appointments_transition`):
 `pending → approved` (professional only) · `pending/approved → cancelled` (either party) · `approved → completed` (professional only, and only after the start time). `cancelled` and `completed` are final. Slots are serialised per professional with a row lock, so two clients can never take the same time; back-to-back bookings are allowed. All times are UTC.
 
 ---
 
+## The configuration platform (phase 3a)
+
+Nothing a business owner may want to change is compiled in. There are three layers:
+
+1. **Environment** — secrets and infrastructure only (connection strings, Google keys, key folder, allowed origins).
+2. **Runtime settings** (table `app_settings`, back office → **Settings**): typed, with a default and **limits that admins cannot exceed** (security-sensitive ones have a floor: the minimum password length cannot go below 8). Edited values are cached in memory per API instance; an edit applies immediately on the instance that handled it and within `Settings:RefreshSeconds` (15 s) on the others. Stored procedures read the same table, so rules such as the booking-length window are enforced in the database too. Cross-checks keep related settings coherent (minimum ≤ maximum). Current settings: password rules, lockout and session lengths (customer and admin), rate limits, booking length and note limits, chat message length, saved-search limit, search page sizes, review/profile text limits, site name and default language. A setting flagged *public* is also served to the web app at `GET /api/config/public` (e.g. so the registration form shows the real password rules).
+3. **Lookups and texts** (back office → **Lookups**, **Texts**): countries (171) → cities (524), nationalities (74), sex, languages, saved-search frequencies, currencies, appointment lengths, weekdays, appointment statuses, message and profile types — each value has a **name per language**, an order, an active flag (values are **switched off, never deleted**, so old data keeps its meaning) and free-form metadata. UI texts (currently the error messages) are stored per language with the shipped wording kept so an edit can be reset; a language with no text for a key falls back to the default language. The web app loads all of it from `GET /api/lookups/{type}` and `GET /api/translations/{language}`.
+
+What deliberately stays in code: security rules (who may approve a booking, the booking state machine, password hashing) — making those configurable would let a mistaken setting break security. Status *labels* and colours are data; the allowed *transitions* are not.
+
+**Caching:** browsers may keep `config/public` for 10 s and lookups/texts for 60 s, so a visitor sees an admin's change within about a minute at most.
+
+**Seed data.** `V005`–`V008` create and fill the platform tables. The geography and texts are generated by `python3 db/tools/gen_seed.py` from `db/tools/original_lookups.json` (the original app's hard-coded lists) and `db/tools/messages_en.json`. English names come from the original; **ISO codes and Arabic names are drafts written for this project — please review them in the back office.** The starter roles *Support*, *Operations* and *Content* are suggestions; edit or delete them.
+
+**Stored values are codes.** Country, nationality, sex, language and saved-search frequency are stored as lookup **codes** (`LB`, `lebanese`, `male`, `ar`, `daily`) and validated against the active lookup values by the stored procedures; cities stay free text with suggestions from the lookup.
+
 ## Configuration reference
 
-All settings can be environment variables (`Section__Key`), user-secrets, or `appsettings.*.json` — but **secrets only via environment variables or user-secrets**. See `.env.example` for the full list.
+Deploy-time configuration only — **business rules are runtime settings in the back office** (see above). Values can be environment variables (`Section__Key`), user-secrets, or `appsettings.*.json` — but **secrets only via environment variables or user-secrets**. See `.env.example` for the full list.
 
 | Key | Purpose | Default |
 |---|---|---|
 | `ConnectionStrings:Default` | API → MySQL (the `EXECUTE`-only account). **Required**; the API refuses to start without it. | — |
 | `Google:ClientId` / `ClientSecret` / `RedirectUri` | Google sign-in | empty (feature off) |
 | `Web:AllowedOrigins` | Extra origins allowed to POST (CSRF) | `http://localhost:5173` |
-| `Auth:MaxFailedAttempts` / `LockoutMinutes` / `SessionHours` / `AuthRequestsPerMinute` / `WritesPerMinute` / `PasswordIterations` | Security tuning | 5 / 15 / 8 / 30 / 120 / 600000 |
+| `Admin:AllowedOrigins` | The back-office app's origin(s) | `http://localhost:5174` |
+| `Auth:PasswordIterations` | PBKDF2 cost (deploy-time: it must match the hardware) | 600000 |
+| `Settings:RefreshSeconds` | How often each API instance re-reads the runtime settings | 15 |
 | `Proxy:TrustForwardedHeaders` | Honour `X-Forwarded-For/Proto` | `false` |
 | `DataProtection:KeysPath` | Folder for encryption keys. Set it in production and share it across instances (framework default is per-machine and can be ephemeral in containers) | framework default |
 
 ### Production notes
 
-* Serve the built web app and the API **under one origin** (reverse proxy `/api` → API). The Google redirect URI is then `https://<domain>/api/auth/google/callback` and cookies stay first-party.
+* Serve the public site, the back office and the API as: `https://<domain>` (web + `/api`) and `https://<admin host>` (admin app + `/api`), both reverse-proxying `/api` to the same API, so cookies stay first-party. Put the back office on its own host name and, if you can, restrict it (IP allow-list or VPN) — it is public-capable by design (strong sign-in) but need not be public. The Google redirect URI is then `https://<domain>/api/auth/google/callback` and cookies stay first-party.
 * Run with `ASPNETCORE_ENVIRONMENT=Production` (cookies become `Secure`; HTTPS required). If TLS terminates at a proxy, set `Proxy__TrustForwardedHeaders=true` **only** when the API is reachable exclusively through that proxy.
-* Persist and protect the Data Protection key folder (`DataProtection__KeysPath`) and share it across instances.
+* **Persist and protect the Data Protection key folder** (`DataProtection__KeysPath`) and share it across instances. It also encrypts the admins' two-factor secrets: if the keys are lost, every admin must re-enrol (another super admin can reset them, or use the `reset-2fa` command).
+* MySQL `max_connections` must exceed the sum of the API instances' pools; the test suite needs a few dozen.
 * Run `migrate` as part of each deployment, before starting the new API version.
 
 ---
@@ -266,9 +326,14 @@ dotnet test Sayserne.sln
 cd web
 npm run build      # type-check + production build
 npm test           # api client + validation unit tests
+
+# Back office
+cd ../admin
+npm run build
+npm test
 ```
 
-What the .NET suite covers: password hashing; input validation; Google ID-token validation (bad signature, wrong audience/issuer, expiry, nonce, `alg: none`, unknown key); the complete Google flow against an in-process fake Google that enforces the client secret and PKCE (new user, returning user, state mismatch, replay, unverified email, account linking with and without the password, explicit linking, locked accounts); registration/login/lockout/logout; CSRF and rate limiting; admin authorisation (anonymous 401, user 403, immediate effect of lock/role changes, last-admin protection); migrations (idempotent, tamper detection, repeatable redeploy, naming rules); the app account being refused direct table access; SQL-injection payloads treated as data; the architecture guard.
+What the .NET suite covers: password hashing; input validation; Google ID-token validation (bad signature, wrong audience/issuer, expiry, nonce, `alg: none`, unknown key); the complete Google flow against an in-process fake Google that enforces the client secret and PKCE (new user, returning user, state mismatch, replay, unverified email, account linking with and without the password, explicit linking, locked accounts); registration/login/lockout/logout; CSRF and rate limiting; admin authorisation (anonymous 401, user 403, immediate effect of lock/role changes, last-admin protection); migrations (idempotent, tamper detection, repeatable redeploy, naming rules); the app account being refused direct table access; SQL-injection payloads treated as data; the architecture guard; **the configuration platform** — settings (types, limits, floors, consistency, public exposure, effect on password rules / lockout / rate limits / booking / chat / alerts / paging, propagation to a second instance, audit with old and new value), lookups (seed data, hierarchy, admin edits, deactivation, validation of profile values against them, default language protected), translations (languages, fallback, edit/reset), roles and permissions (exact access per role, immediate effect of changes, in-use roles protected), **two-factor sign-in** (password alone is no session, enrolment, replay refused — also at the database level under a 20-way race, recovery codes single use, lockout, forged pending cookie ignored, idle and absolute timeouts, cookie flags, separation of admin and website sessions, break-glass reset), the audit log (every change recorded, filters, append-only), and catalog management. Security-critical rules were mutation-tested: breaking each one makes a specific test fail.
 
 CI (`.github/workflows/ci.yml`) runs both suites against a MySQL 8 service container.
 
@@ -279,9 +344,11 @@ CI (`.github/workflows/ci.yml`) runs both suites against a MySQL 8 service conta
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Database foundation, migrations, auth (form + Google), admin users, web shell | **done** |
-| 2 | Catalog, professional profiles/listings, availability, search, booking, reviews, chat, saved searches (+ their web pages) | **done** |
-| 3 | Admin features: categories, reviews, ads, premium/fees, payments, contact messages, site config | not started |
-| 4 | Web tier ported to the new API (the existing React pages), typed client generated from OpenAPI | not started |
+| 2 | Catalog, professional profiles/listings, availability, search, booking, reviews, chat, saved searches (+ web pages) | **done** |
+| 3a | Configuration platform: runtime settings, lookups, translated texts, audit log, roles & permissions, two-factor back-office sign-in, **separate admin app**, users, catalog; public web reads everything from the API | **done** |
+| 3b | File storage (object storage ⇄ server disk, switchable), e-mail system + background jobs (verification, password reset, notifications, saved-search digests), **ads** (3 positions, calendar-date batches, daily fees, impressions/clicks), **premium listings** (calendar batches, per-location limits), fees and manual payments with receipts | not started |
+| 3c | Contact messages, review moderation (professional replies, admin soft-delete) and chat monitoring (incl. deleted chats, highlighted admin interventions), dashboard (current year + year filter, CSV export), About / Contact / legal content, branding (logo, name, palettes) | not started |
+| 4 | Arabic + right-to-left screens, theme toggle and Settings page, image/video uploads in the screens, marketing sections, account disabling/re-enabling, per-user time zones and availability enforcement, final parity check, OpenAPI client | not started |
 
 ## Differences from the original app (phase 2)
 
@@ -301,7 +368,19 @@ Reading the original code surfaced several security problems. They were **not** 
 
 Other deliberate changes: a service may be listed once per professional; owners **hide** a listing (`is_hidden`) while administrators **lock** it (`is_locked`), so an owner cannot undo an admin lock; a professional with live listings must hide them before switching back to a customer profile; profile edits replace all editable fields (so optional fields can be cleared); dates of birth are `yyyy-MM-dd`.
 
+## Differences from the original app (phase 3a)
+
+| Original | Now |
+|---|---|
+| Lists (171 countries, 524 cities, phone codes, 74 nationalities, durations, day names, frequencies) hard-coded in the web code; statuses and positions fixed in the schema | **Lookups** in the database, editable per language in the back office; the web app contains no lists. |
+| Messages, limits and rules (password length, lockout, booking length, 20 alerts, 4000-char messages…) hard-coded | **Runtime settings** with limits, plus **translated texts**, all editable. |
+| One `admin` role inside the public site; back-office pages inside the public app | A **separate admin app** and session, **password + authenticator**, **permission-based roles**, **audit log**. |
+| No record of who changed what | Every back-office change is audited in the same transaction. |
+
 ## Assumptions and decisions needing product-owner confirmation
+
+0. **Phase 3a decisions you gave (recorded):** separate admin app on the same API/database; mandatory two-factor; permission-based roles stored as data; audit of every change; runtime-editable business rules with security floors that apply to form accounts only; city → country → global fallback for country-specific settings (used from 3b); English + Arabic with right-to-left; brand, catalog and lookups as configuration; ads (3 positions), premium and payments admin-only with calendar-date ranges; manual USD payments with receipts; e-mail first (provider configurable); admin can read and join all chats (audited, highlighted); accounts are disabled, never deleted; start with a fresh database; mobile app later. Open points for 3b are listed in the roadmap above.
+0b. **Please review:** the Arabic names for countries, cities and nationalities (drafts); the starter roles *Support / Operations / Content*; the default limits in **Settings**; the public sessions now have a *fixed* length (`Auth.SessionHours`) instead of sliding.
 
 1. **MySQL 8 is required.** The source app ran on TiDB, which does not support stored procedures. Production MySQL hosting is undecided. No data migration from TiDB was done (fresh database).
 2. **Local accounts start with an unverified email.** There is no email-verification or password-reset flow yet (needs a mail provider). Google accounts are verified by Google; linking a verified Google identity marks the matching account verified.

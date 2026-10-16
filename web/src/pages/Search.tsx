@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { LookupSelect } from "../components";
+import { useLookup } from "../config";
 import { api, errorMessage, fromQuery, toQuery, type Category, type Listing, type Paged, type SearchFilters, type Service } from "../api";
 import { useAuth } from "../auth";
 import { ListingCard } from "../components";
 
 export default function Search() {
+  const frequencies = useLookup("alert_frequency");
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
   const filters = useMemo(() => fromQuery(params), [params]);
@@ -31,7 +34,7 @@ export default function Search() {
   async function saveAlert() {
     const name = window.prompt("Name this saved search");
     if (!name) return;
-    try { await api.createAlert(name, { ...filters, page: undefined, pageSize: undefined }, "daily"); setSaved("Saved. Find it under Alerts."); }
+    try { await api.createAlert(name, { ...filters, page: undefined, pageSize: undefined }, frequencies.values[0]?.code ?? "daily"); setSaved("Saved. Find it under Alerts."); }
     catch (e) { setSaved(errorMessage(e)); }
   }
 
@@ -48,7 +51,10 @@ export default function Search() {
           <select value={draft.serviceId ?? ""} onChange={e => set({ serviceId: num(e.target.value) })}>
             <option value="">Any</option>{services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select></label>
+        <label>Country<LookupSelect type="country" value={draft.country} onChange={v => set({ country: v })} emptyLabel="Any" /></label>
         <label>City<input value={draft.city ?? ""} onChange={e => set({ city: e.target.value })} /></label>
+        <label>Sex<LookupSelect type="sex" value={draft.sex} onChange={v => set({ sex: v })} emptyLabel="Any" /></label>
+        <label>Nationality<LookupSelect type="nationality" value={draft.nationality} onChange={v => set({ nationality: v })} emptyLabel="Any" /></label>
         <label>Name<input value={draft.firstName ?? ""} onChange={e => set({ firstName: e.target.value })} /></label>
         <label>Min rating
           <select value={draft.minStars ?? ""} onChange={e => set({ minStars: num(e.target.value) })}>

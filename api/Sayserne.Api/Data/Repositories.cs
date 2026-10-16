@@ -1,3 +1,5 @@
+using Sayserne.Api.Platform;
+
 namespace Sayserne.Api.Data;
 
 // Repositories translate method calls into stored-procedure calls. No SQL text lives here.
@@ -21,10 +23,10 @@ public interface IIdentityRepository
 
 public interface IAdminUserRepository
 {
-    Task<PagedResult<UserRecord>> ListAsync(string? search, int page, int pageSize, CancellationToken ct = default);
-    Task<UserRecord> SetLockedAsync(long userId, bool isLocked, CancellationToken ct = default);
-    Task<UserRecord> SetRoleAsync(long userId, string role, CancellationToken ct = default);
-    Task<UserRecord> SetFlagsAsync(long userId, bool isPremium, bool isStarred, CancellationToken ct = default);
+    Task<PagedResult<AdminUserRow>> ListAsync(string? search, int page, int pageSize, CancellationToken ct = default);
+    Task<UserRecord> SetLockedAsync(long actorId, long userId, bool isLocked, CancellationToken ct = default);
+    Task<UserRecord> SetRoleAsync(long actorId, long userId, string role, CancellationToken ct = default);
+    Task<UserRecord> SetFlagsAsync(long actorId, long userId, bool isPremium, bool isStarred, CancellationToken ct = default);
 }
 
 public sealed class UserRepository(IStoredProcedureExecutor db) : IUserRepository
@@ -71,23 +73,23 @@ public sealed class IdentityRepository(IStoredProcedureExecutor db) : IIdentityR
 
 public sealed class AdminUserRepository(IStoredProcedureExecutor db) : IAdminUserRepository
 {
-    public async Task<PagedResult<UserRecord>> ListAsync(string? search, int page, int pageSize, CancellationToken ct = default)
+    public async Task<PagedResult<AdminUserRow>> ListAsync(string? search, int page, int pageSize, CancellationToken ct = default)
     {
         var (rows, totals) = await db.QueryTwoAsync("sp_admin_users_list",
             new ProcParams().Add("p_search", search).Add("p_page", page).Add("p_page_size", pageSize),
-            Mappers.User, r => r.Long("total"), ct);
-        return new PagedResult<UserRecord>(rows, totals.Count > 0 ? totals[0] : 0, Math.Max(page, 1), Math.Clamp(pageSize, 1, 100));
+            Platform.PlatformMappers.AdminUser, r => r.Long("total"), ct);
+        return new PagedResult<AdminUserRow>(rows, totals.Count > 0 ? totals[0] : 0, Math.Max(page, 1), Math.Clamp(pageSize, 1, 100));
     }
 
-    public async Task<UserRecord> SetLockedAsync(long userId, bool isLocked, CancellationToken ct = default) =>
+    public async Task<UserRecord> SetLockedAsync(long actorId, long userId, bool isLocked, CancellationToken ct = default) =>
         (await db.QuerySingleOrDefaultAsync("sp_admin_users_set_locked",
-            new ProcParams().Add("p_user_id", userId).Add("p_is_locked", isLocked), Mappers.User, ct))!;
+            new ProcParams().Add("p_actor_id", actorId).Add("p_user_id", userId).Add("p_is_locked", isLocked), Mappers.User, ct))!;
 
-    public async Task<UserRecord> SetRoleAsync(long userId, string role, CancellationToken ct = default) =>
+    public async Task<UserRecord> SetRoleAsync(long actorId, long userId, string role, CancellationToken ct = default) =>
         (await db.QuerySingleOrDefaultAsync("sp_admin_users_set_role",
-            new ProcParams().Add("p_user_id", userId).Add("p_role", role), Mappers.User, ct))!;
+            new ProcParams().Add("p_actor_id", actorId).Add("p_user_id", userId).Add("p_role", role), Mappers.User, ct))!;
 
-    public async Task<UserRecord> SetFlagsAsync(long userId, bool isPremium, bool isStarred, CancellationToken ct = default) =>
+    public async Task<UserRecord> SetFlagsAsync(long actorId, long userId, bool isPremium, bool isStarred, CancellationToken ct = default) =>
         (await db.QuerySingleOrDefaultAsync("sp_admin_users_set_flags",
-            new ProcParams().Add("p_user_id", userId).Add("p_is_premium", isPremium).Add("p_is_starred", isStarred), Mappers.User, ct))!;
+            new ProcParams().Add("p_actor_id", actorId).Add("p_user_id", userId).Add("p_is_premium", isPremium).Add("p_is_starred", isStarred), Mappers.User, ct))!;
 }

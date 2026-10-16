@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
 using Sayserne.Api.Auth;
 using Sayserne.Api.Data;
+using Sayserne.Api.Platform;
 
 namespace Sayserne.Api.Endpoints;
 
@@ -24,9 +25,9 @@ public static class AuthEndpoints
         g.MapGet("/me", Me).RequireAuthorization();
     }
 
-    private static async Task<IResult> Register(HttpContext ctx, RegisterRequest request, IUserRepository users, IPasswordHasher hasher)
+    private static async Task<IResult> Register(HttpContext ctx, RegisterRequest request, IUserRepository users, IPasswordHasher hasher, ISettingsService settings)
     {
-        var errors = InputValidation.ValidateRegistration(request);
+        var errors = InputValidation.ValidateRegistration(request, settings);
         if (errors.Count > 0) throw new AppException("VALIDATION_FAILED", 400, fieldErrors: errors);
 
         var user = await users.CreateLocalAsync(
@@ -38,7 +39,7 @@ public static class AuthEndpoints
 
     private static async Task<IResult> Login(
         HttpContext ctx, LoginRequest request, IUserRepository users, IPasswordHasher hasher,
-        IOptions<AuthOptions> authOptions, TimeProvider clock, DummyPasswordHash dummy)
+        ISettingsService settings, TimeProvider clock, DummyPasswordHash dummy)
     {
         var email = InputValidation.NormalizeEmail(request.Email);
         var password = request.Password ?? string.Empty;
@@ -56,7 +57,7 @@ public static class AuthEndpoints
 
         if (user.PasswordHash is null || !hasher.Verify(password, user.PasswordHash))
         {
-            await users.RecordLoginFailureAsync(user.Id, authOptions.Value.MaxFailedAttempts, authOptions.Value.LockoutMinutes);
+            await users.RecordLoginFailureAsync(user.Id, settings.GetInt("Auth.MaxFailedAttempts"), settings.GetInt("Auth.LockoutMinutes"));
             throw new AppException("INVALID_CREDENTIALS");
         }
 
