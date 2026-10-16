@@ -13,6 +13,7 @@ using Sayserne.Api.Data;
 using Sayserne.Api.Endpoints;
 using Sayserne.Api.Email;
 using Sayserne.Api.Infrastructure;
+using Sayserne.Api.Ads;
 using Sayserne.Api.Jobs;
 using Sayserne.Api.Media;
 using Sayserne.Api.Platform;
@@ -60,6 +61,12 @@ namespace Sayserne.Api
             builder.Services.AddSingleton<MarketplaceNotifier>();
             builder.Services.AddSingleton<IJobHandler, EmailSendJobHandler>();
             builder.Services.AddSingleton<IJobHandler, MessageNotificationJobHandler>();
+            builder.Services.AddSingleton<IAdRepository, AdRepository>();
+            builder.Services.AddSingleton<IJobHandler, AdPurgeJobHandler>();
+            builder.Services.AddSingleton<IDigestRepository, DigestRepository>();
+            builder.Services.AddSingleton<IJobHandler, AlertDigestJobHandler>();
+            builder.Services.AddSingleton<DigestScheduler>();
+            if (builder.Configuration.GetValue<bool?>("Jobs:SchedulerEnabled") ?? true) builder.Services.AddHostedService(sp => sp.GetRequiredService<DigestScheduler>());
             builder.Services.AddHostedService<SettingsRefresher>();
 
             // files, media processing and background jobs
@@ -134,6 +141,12 @@ namespace Sayserne.Api
                         _ => new FixedWindowRateLimiterOptions { PermitLimit = settings.GetInt("Auth.AuthRequestsPerMinute"), Window = TimeSpan.FromMinutes(1), QueueLimit = 0 });
                 });
                 // writes (profile edits, bookings, chat messages, alerts): limited per signed-in user, falling back to the client IP
+                o.AddPolicy(AdEndpoints.EventLimiter, ctx =>
+                {
+                    var settings = ctx.RequestServices.GetRequiredService<ISettingsService>();
+                    return RateLimitPartition.GetFixedWindowLimiter($"ads|{ctx.Connection.RemoteIpAddress}|{settings.Version}",
+                        _ => new FixedWindowRateLimiterOptions { PermitLimit = settings.GetInt("Ads.EventsPerMinute"), Window = TimeSpan.FromMinutes(1), QueueLimit = 0 });
+                });
                 o.AddPolicy(MarketplaceEndpoints.WriteLimiter, ctx =>
                 {
                     var settings = ctx.RequestServices.GetRequiredService<ISettingsService>();
@@ -170,6 +183,7 @@ namespace Sayserne.Api
             app.MapAdmin();
             app.MapAdminPlatform();
             app.MapAccountEmail();
+            app.MapAds();
             app.MapMarketplace();
             app.MapPublicConfig();
             app.MapFiles();

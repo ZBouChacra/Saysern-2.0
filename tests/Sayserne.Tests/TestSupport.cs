@@ -245,6 +245,7 @@ public sealed class ApiHost : IAsyncDisposable
             ["Auth:PasswordIterations"] = "2000",          // fast hashing for tests only (deploy-time setting)
             ["Settings:RefreshSeconds"] = "3600",           // tests refresh explicitly
             ["Jobs:Enabled"] = "false",                     // tests run due jobs themselves (JobRunner.RunOnceAsync)
+            ["Jobs:SchedulerEnabled"] = "false",            // ...and the digest scheduler (DigestScheduler.RunOnceAsync)
             ["Storage:DiskPath"] = Path.Combine(Path.GetTempPath(), "sayserne-test-storage-" + Guid.NewGuid().ToString("N")),
         };
         // "Auth:Xyz" keys given by tests pin the runtime setting "Auth.Xyz" for this host only (other tests share the database, so it is never written there)

@@ -12,12 +12,13 @@ namespace Sayserne.Api.Endpoints;
 public static class FileEndpoints
 {
     /// <summary>What each purpose accepts. Ad images are uploaded by staff through the back office, not here.</summary>
-    private sealed record Purpose(bool Image, bool Video, bool NeedsRoom, bool Public);
+    private sealed record Purpose(bool Image, bool Video, bool NeedsRoom, bool Public, bool StaffOnly = false);
     private static readonly Dictionary<string, Purpose> Purposes = new(StringComparer.Ordinal)
     {
         ["profile_photo"] = new(Image: true, Video: false, NeedsRoom: false, Public: true),
         ["banner_photo"] = new(Image: true, Video: false, NeedsRoom: false, Public: true),
         ["chat_media"] = new(Image: true, Video: true, NeedsRoom: true, Public: false),
+        ["ad_image"] = new(Image: true, Video: false, NeedsRoom: false, Public: true, StaffOnly: true),   // uploaded through the back office only
     };
 
     private static string Url(string id) => $"/api/files/{id}";
@@ -31,10 +32,14 @@ public static class FileEndpoints
         g.MapGet("/{id}/status", Status).RequireAuthorization();
     }
 
-    private static async Task<IResult> Upload(HttpContext ctx, string? purpose, long? roomId, IFileRepository files, IStorageRouter storage, MediaIngestService ingest, IJobQueue jobs,
-        ISettingsService settings, TimeProvider clock)
+    private static Task<IResult> Upload(HttpContext ctx, string? purpose, long? roomId, IFileRepository files, IStorageRouter storage, MediaIngestService ingest, IJobQueue jobs,
+        ISettingsService settings, TimeProvider clock) => UploadCore(ctx, purpose, roomId, files, storage, ingest, jobs, settings, clock, allowStaffOnly: false);
+
+    /// <summary>The upload pipeline shared by the public endpoint and the back office. Staff-only purposes are refused unless the caller is the back office.</summary>
+    internal static async Task<IResult> UploadCore(HttpContext ctx, string? purpose, long? roomId, IFileRepository files, IStorageRouter storage, MediaIngestService ingest, IJobQueue jobs,
+        ISettingsService settings, TimeProvider clock, bool allowStaffOnly)
     {
-        if (purpose is null || !Purposes.TryGetValue(purpose, out var rule)) throw Invalid("purpose", "Unknown purpose.");
+        if (purpose is null || !Purposes.TryGetValue(purpose, out var rule) || (rule.StaffOnly && !allowStaffOnly)) throw Invalid("purpose", "Unknown purpose.");
         if (rule.NeedsRoom && roomId is null) throw Invalid("roomId", "A conversation is required.");
         if (!MediaTypeHeaderValue.TryParse(ctx.Request.ContentType, out var mediaType) || !mediaType.MediaType.Equals("multipart/form-data", StringComparison.OrdinalIgnoreCase)
             || string.IsNullOrEmpty(HeaderUtilities.RemoveQuotes(mediaType.Boundary).Value))
