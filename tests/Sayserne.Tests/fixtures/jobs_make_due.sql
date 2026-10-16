@@ -1,0 +1,1 @@
+UPDATE jobs SET run_at = DATE_SUB(UTC_TIMESTAMP(3), INTERVAL 1 SECOND) WHERE status = 'pending'

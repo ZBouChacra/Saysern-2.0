@@ -21,3 +21,6 @@ dp-keys/
 .DS_Store
 Thumbs.db
 .idea/
+
+# uploaded files kept on the server's disk
+api/Sayserne.Api/storage/

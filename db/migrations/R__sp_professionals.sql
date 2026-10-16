@@ -39,7 +39,7 @@ CREATE PROCEDURE sp_profile_update(
   IN p_user_id BIGINT UNSIGNED, IN p_first_name VARCHAR(100), IN p_last_name VARCHAR(100), IN p_phone VARCHAR(50),
   IN p_sex VARCHAR(10), IN p_date_of_birth DATE, IN p_nationality VARCHAR(100), IN p_country VARCHAR(100),
   IN p_city VARCHAR(100), IN p_bio TEXT, IN p_portfolio TEXT, IN p_profile_photo VARCHAR(500),
-  IN p_banner_photo VARCHAR(500), IN p_preferred_language VARCHAR(2), IN p_profile_type VARCHAR(20))
+  IN p_banner_photo VARCHAR(500), IN p_preferred_language VARCHAR(10), IN p_profile_type VARCHAR(20))
 BEGIN
   DECLARE v_id BIGINT UNSIGNED;
   DECLARE v_current VARCHAR(20);
@@ -61,6 +61,15 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM lookup_values WHERE type_code = 'language' AND code = p_preferred_language AND is_active = 1) THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'INVALID_LANGUAGE';
+  END IF;
+  -- a photo may be an uploaded file ("/api/files/<id>"): it must be this user's own, finished file of the right purpose
+  IF p_profile_photo LIKE '/api/files/%' AND NOT EXISTS (
+       SELECT 1 FROM files WHERE id = SUBSTRING(p_profile_photo, 12) AND owner_id = p_user_id AND purpose = 'profile_photo' AND status = 'ready' AND is_deleted = 0) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'FILE_NOT_FOUND';
+  END IF;
+  IF p_banner_photo LIKE '/api/files/%' AND NOT EXISTS (
+       SELECT 1 FROM files WHERE id = SUBSTRING(p_banner_photo, 12) AND owner_id = p_user_id AND purpose = 'banner_photo' AND status = 'ready' AND is_deleted = 0) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'FILE_NOT_FOUND';
   END IF;
   -- switching back to customer would orphan live listings; hide them first
   IF v_current = 'professional' AND p_profile_type = 'customer' THEN

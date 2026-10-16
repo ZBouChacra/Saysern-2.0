@@ -12,6 +12,8 @@ using Sayserne.Api.Auth;
 using Sayserne.Api.Data;
 using Sayserne.Api.Endpoints;
 using Sayserne.Api.Infrastructure;
+using Sayserne.Api.Jobs;
+using Sayserne.Api.Media;
 using Sayserne.Api.Platform;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -49,6 +51,20 @@ namespace Sayserne.Api
             // runtime settings: loaded at startup, refreshed after admin edits and periodically (other instances)
             builder.Services.AddSingleton<ISettingsService>(sp => new SettingsService(sp.GetRequiredService<IStoredProcedureExecutor>(), sp.GetService<SettingOverrides>()));
             builder.Services.AddHostedService<SettingsRefresher>();
+
+            // files, media processing and background jobs
+            builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection("Storage"));
+            builder.Services.Configure<MediaOptions>(builder.Configuration.GetSection("Media"));
+            builder.Services.AddSingleton<DiskStorage>();
+            builder.Services.AddSingleton<S3Storage>();
+            builder.Services.AddSingleton<IStorageRouter, StorageRouter>();
+            builder.Services.AddSingleton<IMediaProcessor, MediaProcessor>();
+            builder.Services.AddSingleton<IFileRepository, FileRepository>();
+            builder.Services.AddSingleton<MediaIngestService>();
+            builder.Services.AddSingleton<IJobQueue, JobQueue>();
+            builder.Services.AddSingleton<IJobHandler, MediaProcessJobHandler>();
+            builder.Services.AddSingleton<JobRunner>();
+            if (builder.Configuration.GetValue<bool?>("Jobs:Enabled") ?? true) builder.Services.AddHostedService(sp => sp.GetRequiredService<JobRunner>());
 
             builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection("Auth"));
             builder.Services.Configure<GoogleOptions>(builder.Configuration.GetSection("Google"));
@@ -144,6 +160,7 @@ namespace Sayserne.Api
             app.MapAdminPlatform();
             app.MapMarketplace();
             app.MapPublicConfig();
+            app.MapFiles();
             return app;
         }
     }

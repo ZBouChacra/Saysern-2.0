@@ -1,0 +1,27 @@
+-- V010: texts for the file and background-job error codes. Edit them in the back office (Texts).
+
+INSERT INTO translations (language, translation_key, value, default_value) VALUES
+('en','error.FILE_NOT_FOUND','That file doesn''t exist or you can''t see it.','That file doesn''t exist or you can''t see it.'),
+('ar','error.FILE_NOT_FOUND','هذا الملف غير موجود أو لا يمكنك عرضه.','هذا الملف غير موجود أو لا يمكنك عرضه.'),
+('en','error.FILE_NOT_READY','The file is still being processed. Please try again in a moment.','The file is still being processed. Please try again in a moment.'),
+('ar','error.FILE_NOT_READY','الملف قيد المعالجة. يرجى المحاولة بعد قليل.','الملف قيد المعالجة. يرجى المحاولة بعد قليل.'),
+('en','error.UNSUPPORTED_FILE','This kind of file isn''t supported. Choose a JPEG, PNG, GIF or WebP image, or an MP4 or WebM video.','This kind of file isn''t supported. Choose a JPEG, PNG, GIF or WebP image, or an MP4 or WebM video.'),
+('ar','error.UNSUPPORTED_FILE','هذا النوع من الملفات غير مدعوم. اختر صورة JPEG أو PNG أو GIF أو WebP، أو فيديو MP4 أو WebM.','هذا النوع من الملفات غير مدعوم. اختر صورة JPEG أو PNG أو GIF أو WebP، أو فيديو MP4 أو WebM.'),
+('en','error.FILE_TOO_LARGE','This file is too large. Please choose a smaller one.','This file is too large. Please choose a smaller one.'),
+('ar','error.FILE_TOO_LARGE','هذا الملف كبير جدًا. يرجى اختيار ملف أصغر.','هذا الملف كبير جدًا. يرجى اختيار ملف أصغر.'),
+('en','error.IMAGE_TOO_LARGE','This image has too many pixels. Please choose a smaller one.','This image has too many pixels. Please choose a smaller one.'),
+('ar','error.IMAGE_TOO_LARGE','هذه الصورة كبيرة جدًا من حيث الأبعاد. يرجى اختيار صورة أصغر.','هذه الصورة كبيرة جدًا من حيث الأبعاد. يرجى اختيار صورة أصغر.'),
+('en','error.VIDEO_DISABLED','Video uploads are switched off at the moment.','Video uploads are switched off at the moment.'),
+('ar','error.VIDEO_DISABLED','رفع الفيديو متوقف حاليًا.','رفع الفيديو متوقف حاليًا.'),
+('en','error.VIDEO_TOO_LONG','This video is too long. Please choose a shorter one.','This video is too long. Please choose a shorter one.'),
+('ar','error.VIDEO_TOO_LONG','هذا الفيديو طويل جدًا. يرجى اختيار فيديو أقصر.','هذا الفيديو طويل جدًا. يرجى اختيار فيديو أقصر.'),
+('en','error.MEDIA_TIMEOUT','Processing this file took too long. Please try a smaller file.','Processing this file took too long. Please try a smaller file.'),
+('ar','error.MEDIA_TIMEOUT','استغرقت معالجة هذا الملف وقتًا طويلًا. يرجى تجربة ملف أصغر.','استغرقت معالجة هذا الملف وقتًا طويلًا. يرجى تجربة ملف أصغر.'),
+('en','error.PROCESSING_FAILED','We couldn''t process this file. Please try again later.','We couldn''t process this file. Please try again later.'),
+('ar','error.PROCESSING_FAILED','تعذّرت معالجة هذا الملف. يرجى المحاولة لاحقًا.','تعذّرت معالجة هذا الملف. يرجى المحاولة لاحقًا.'),
+('en','error.STORAGE_UNAVAILABLE','File storage is not available right now. Please try again later.','File storage is not available right now. Please try again later.'),
+('ar','error.STORAGE_UNAVAILABLE','تخزين الملفات غير متاح حاليًا. يرجى المحاولة لاحقًا.','تخزين الملفات غير متاح حاليًا. يرجى المحاولة لاحقًا.'),
+('en','error.INVALID_STORAGE_PROVIDER','That storage provider is not available.','That storage provider is not available.'),
+('ar','error.INVALID_STORAGE_PROVIDER','مزوّد التخزين هذا غير متاح.','مزوّد التخزين هذا غير متاح.'),
+('en','error.JOB_NOT_RETRYABLE','Only failed jobs can be retried.','Only failed jobs can be retried.'),
+('ar','error.JOB_NOT_RETRYABLE','يمكن إعادة محاولة المهام الفاشلة فقط.','يمكن إعادة محاولة المهام الفاشلة فقط.');

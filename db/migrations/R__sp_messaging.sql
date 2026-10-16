@@ -61,7 +61,7 @@ BEGIN
 
   UPDATE chat_messages SET is_read = 1 WHERE room_id = p_room_id AND sender_id <> p_user_id AND is_read = 0;
 
-  SELECT id, room_id, sender_id, message_type, content, latitude, longitude, is_read, created_at
+  SELECT id, room_id, sender_id, message_type, content, latitude, longitude, file_id, is_read, created_at
   FROM chat_messages WHERE room_id = p_room_id
   ORDER BY id DESC
   LIMIT v_limit OFFSET v_offset;
@@ -69,10 +69,11 @@ END$$
 
 CREATE PROCEDURE sp_chat_send(
   IN p_user_id BIGINT UNSIGNED, IN p_room_id BIGINT UNSIGNED, IN p_type VARCHAR(20), IN p_content TEXT,
-  IN p_latitude DECIMAL(10,7), IN p_longitude DECIMAL(10,7))
+  IN p_latitude DECIMAL(10,7), IN p_longitude DECIMAL(10,7), IN p_file_id CHAR(32))
 BEGIN
   DECLARE v_room BIGINT UNSIGNED;
   DECLARE v_id BIGINT UNSIGNED;
+  DECLARE v_status VARCHAR(12);
   DECLARE EXIT HANDLER FOR SQLEXCEPTION
   BEGIN
     ROLLBACK;
@@ -91,19 +92,32 @@ BEGIN
     IF p_latitude IS NULL OR p_longitude IS NULL OR p_latitude NOT BETWEEN -90 AND 90 OR p_longitude NOT BETWEEN -180 AND 180 THEN
       SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'INVALID_MESSAGE';
     END IF;
+  ELSEIF p_type IN ('image', 'video') THEN
+    -- the file must be the sender's own chat media for THIS room, of the matching kind, and fully processed
+    SELECT status INTO v_status FROM files
+     WHERE id = p_file_id AND owner_id = p_user_id AND purpose = 'chat_media' AND room_id = p_room_id AND media_kind = p_type AND is_deleted = 0;
+    IF v_status IS NULL THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'FILE_NOT_FOUND';
+    END IF;
+    IF v_status <> 'ready' THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'FILE_NOT_READY';
+    END IF;
+    IF p_content IS NOT NULL AND CHAR_LENGTH(p_content) > (SELECT CAST(value_text AS SIGNED) FROM app_settings WHERE setting_key = 'Chat.MaxMessageLength') THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'INVALID_MESSAGE';
+    END IF;
   ELSE
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'INVALID_MESSAGE';
   END IF;
 
   START TRANSACTION;
-  INSERT INTO chat_messages (room_id, sender_id, message_type, content, latitude, longitude)
-  VALUES (p_room_id, p_user_id, p_type, IF(p_type = 'text', p_content, NULL),
-          IF(p_type = 'location', p_latitude, NULL), IF(p_type = 'location', p_longitude, NULL));
+  INSERT INTO chat_messages (room_id, sender_id, message_type, content, latitude, longitude, file_id)
+  VALUES (p_room_id, p_user_id, p_type, IF(p_type IN ('text', 'image', 'video'), NULLIF(TRIM(p_content), ''), NULL),
+          IF(p_type = 'location', p_latitude, NULL), IF(p_type = 'location', p_longitude, NULL), IF(p_type IN ('image', 'video'), p_file_id, NULL));
   SET v_id = LAST_INSERT_ID();
   UPDATE chat_rooms SET last_message_at = UTC_TIMESTAMP(3) WHERE id = p_room_id;
   COMMIT;
 
-  SELECT id, room_id, sender_id, message_type, content, latitude, longitude, is_read, created_at
+  SELECT id, room_id, sender_id, message_type, content, latitude, longitude, file_id, is_read, created_at
   FROM chat_messages WHERE id = v_id;
 END$$
 

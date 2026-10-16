@@ -16,7 +16,7 @@ Staff    ──▶ admin/ ─/api──┘      │  cookie sessions (separate f
  (password + authenticator)       └─ Google OIDC (public site only)
 ```
 
-> **Status: phases 1, 2 and 3a done.** Foundation and authentication (1), the core marketplace (2), and the **configuration platform** (3a): runtime settings, lookups, translated texts, audit log, roles and permissions, two-factor back-office sign-in, user/catalog management — in a separate admin app.
+> **Status: phases 1, 2 and 3a done; 3b started (files, media and background jobs are built; web screens for them, e-mail, ads, premium, fees and payments are next).** Foundation and authentication (1), the core marketplace (2), and the **configuration platform** (3a): runtime settings, lookups, translated texts, audit log, roles and permissions, two-factor back-office sign-in, user/catalog management — in a separate admin app.
 > Not built yet: ads, premium listings, fees and payments, file storage, e-mail and notifications (3b); contact messages, review and chat moderation, dashboard, About/Contact/legal content (3c); Arabic and right-to-left screens, theme and Settings page, image uploads in the screens, marketing sections, account disabling (4). The mobile app comes after the web application.
 
 ---
@@ -290,6 +290,18 @@ What deliberately stays in code: security rules (who may approve a booking, the 
 
 **Stored values are codes.** Country, nationality, sex, language and saved-search frequency are stored as lookup **codes** (`LB`, `lebanese`, `male`, `ar`, `daily`) and validated against the active lookup values by the stored procedures; cities stay free text with suggestions from the lookup.
 
+## Files, media and background jobs (phase 3b, part 1)
+
+**Requirement:** `ffmpeg` and `ffprobe` must be installed on the server (free; Windows, Linux and macOS builds exist). Images and videos are processed with them. There are no extra .NET packages.
+
+* **Uploads** — `POST /api/files?purpose=profile_photo|banner_photo|chat_media[&roomId=]` (multipart, field `file`), `GET /api/files/{id}` (public for profile and banner photos; chat media only for the two people in the conversation; anything else is a plain 404), `GET /api/files/{id}/status` (uploader only). The type is decided from the file's **first bytes**, never its name: only JPEG, PNG, GIF, WebP images and MP4/MOV/WebM video pass. SVG, HTML, PDF, archives, executables and text are refused.
+* **Images** become a metadata-free JPEG no larger than `Media.ImageMaxDimension` pixels and `Media.MaxImageMB`; they are never enlarged. A file that claims an absurd size (a "decompression bomb") is refused before decoding. Only plain raster formats are ever decoded (ffmpeg can open SVG and others, which may reference local files; the processor refuses them by an explicit allow-list).
+* **Videos** are accepted at once (`202`), then compressed in the background to H.264/AAC MP4, at most `Media.VideoMaxHeight` high, `Media.VideoMaxSeconds` long and `Media.MaxVideoMB` big, metadata removed, fast-start so players can seek. `Media.VideoEnabled` switches video off to save space. Uploads over `Media.MaxUploadMB` are refused (the rest of the upload is read and discarded so the browser gets a clean "too large" answer).
+* **Storage** — `Storage.Provider` (runtime setting) chooses where **new** files go: `disk` (this server, `Storage:DiskPath`) or `s3` (any S3-compatible object store, configured through `Storage:S3:*` environment variables). Every file records its own provider, so switching later — for example when the business grows and you buy a storage server — never strands old files. The S3 client is implemented here (AWS Signature V4, verified against Amazon's published test vectors); objects are buffered in memory, which is fine at these sizes.
+* **Chat** — messages can be `image` or `video`, referencing the sender's own finished file for that conversation, with an optional caption. A profile or banner photo may be `/api/files/<id>` of the user's own finished upload of that purpose (or still an external link).
+* **Background jobs** — table `jobs`, claimed with `FOR UPDATE SKIP LOCKED`, so any number of API instances can run workers and each job runs once. A worker that dies loses its lease (`Jobs.LeaseSeconds`) and another takes over; failures are retried with doubling delays (`Jobs.RetryDelaySeconds`, `Jobs.MaxAttempts`); a permanent failure (an unacceptable file) is not retried. `Jobs:Enabled=false` turns the in-process worker off (run it elsewhere or in tests). Staff with `jobs.read` / `jobs.manage` can list and retry jobs (`/api/admin/jobs`).
+* **Known limitations** — transparent PNGs are flattened to JPEG (transparency is lost); a *refused* video cannot be retried (its raw upload is deleted: the user uploads another); S3 downloads are buffered in memory.
+
 ## Configuration reference
 
 Deploy-time configuration only — **business rules are runtime settings in the back office** (see above). Values can be environment variables (`Section__Key`), user-secrets, or `appsettings.*.json` — but **secrets only via environment variables or user-secrets**. See `.env.example` for the full list.
@@ -346,7 +358,7 @@ CI (`.github/workflows/ci.yml`) runs both suites against a MySQL 8 service conta
 | 1 | Database foundation, migrations, auth (form + Google), admin users, web shell | **done** |
 | 2 | Catalog, professional profiles/listings, availability, search, booking, reviews, chat, saved searches (+ web pages) | **done** |
 | 3a | Configuration platform: runtime settings, lookups, translated texts, audit log, roles & permissions, two-factor back-office sign-in, **separate admin app**, users, catalog; public web reads everything from the API | **done** |
-| 3b | File storage (object storage ⇄ server disk, switchable), e-mail system + background jobs (verification, password reset, notifications, saved-search digests), **ads** (3 positions, calendar-date batches, daily fees, impressions/clicks), **premium listings** (calendar batches, per-location limits), fees and manual payments with receipts | not started |
+| 3b | **Done in the API:** file storage (object storage ⇄ server disk, switchable), image/video processing, background jobs, image/video chat messages and uploaded profile photos. **Still to do:** the web screens for them, e-mail system (verification, password reset, notifications, saved-search digests), **ads** (3 positions, calendar-date batches, daily fees, impressions/clicks), **premium listings** (calendar batches, per-location limits), fees and manual payments with receipts | not started |
 | 3c | Contact messages, review moderation (professional replies, admin soft-delete) and chat monitoring (incl. deleted chats, highlighted admin interventions), dashboard (current year + year filter, CSV export), About / Contact / legal content, branding (logo, name, palettes) | not started |
 | 4 | Arabic + right-to-left screens, theme toggle and Settings page, image/video uploads in the screens, marketing sections, account disabling/re-enabling, per-user time zones and availability enforcement, final parity check, OpenAPI client | not started |
 

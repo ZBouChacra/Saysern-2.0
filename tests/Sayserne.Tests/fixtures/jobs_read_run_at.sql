@@ -1,0 +1,1 @@
+SELECT TIMESTAMPDIFF(MICROSECOND, UTC_TIMESTAMP(3), run_at) / 1000000 AS seconds_from_now FROM jobs WHERE id = {{ID}}

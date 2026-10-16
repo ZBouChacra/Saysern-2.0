@@ -57,7 +57,7 @@ public sealed record ChatRoom(long Id, DateTime LastMessageAt, DateTime CreatedA
 public sealed record ChatRoomSummary(
     long Id, long OtherUserId, string OtherFirstName, string OtherLastName, string? OtherPhoto, DateTime LastMessageAt,
     string? LastMessageType, string? LastMessageContent, long? LastMessageSenderId, int UnreadCount);
-public sealed record ChatMessage(long Id, long RoomId, long SenderId, string MessageType, string? Content, decimal? Latitude, decimal? Longitude, bool IsRead, DateTime CreatedAt);
+public sealed record ChatMessage(long Id, long RoomId, long SenderId, string MessageType, string? Content, decimal? Latitude, decimal? Longitude, string? FileId, bool IsRead, DateTime CreatedAt);
 public sealed record Alert(long Id, string Name, SearchFilters SearchCriteria, string Frequency, DateTime CreatedAt);
 
 internal static class MarketplaceMappers
@@ -115,7 +115,7 @@ internal static class MarketplaceMappers
         r.Long("id"), r.Long("other_user_id"), r.Str("other_first_name"), r.Str("other_last_name"), r.StrOrNull("other_photo"), r.Utc("last_message_at"),
         r.StrOrNull("last_message_type"), r.StrOrNull("last_message_content"), r.LongOrNull("last_message_sender_id"), r.Int("unread_count"));
     public static ChatMessage Message(DbDataReader r) => new(
-        r.Long("id"), r.Long("room_id"), r.Long("sender_id"), r.Str("message_type"), r.StrOrNull("content"), r.DecOrNull("latitude"), r.DecOrNull("longitude"),
+        r.Long("id"), r.Long("room_id"), r.Long("sender_id"), r.Str("message_type"), r.StrOrNull("content"), r.DecOrNull("latitude"), r.DecOrNull("longitude"), r.StrOrNull("file_id"),
         r.Bool("is_read"), r.Utc("created_at"));
 
     public static Alert Alert(DbDataReader r) => new(

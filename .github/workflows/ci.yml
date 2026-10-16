@@ -20,6 +20,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+      - name: Install ffmpeg (the media tests use the real thing, as the server does)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Build and test (includes the no-inline-SQL guard)
         run: dotnet test Sayserne.sln --configuration Release
         env:

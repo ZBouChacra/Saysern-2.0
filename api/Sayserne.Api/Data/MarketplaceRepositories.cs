@@ -51,7 +51,7 @@ public interface IMessagingRepository
     Task<ChatRoom> StartChatAsync(long userId, long otherId, CancellationToken ct = default);
     Task<IReadOnlyList<ChatRoomSummary>> RoomsAsync(long userId, CancellationToken ct = default);
     Task<IReadOnlyList<ChatMessage>> MessagesAsync(long userId, long roomId, int limit, int offset, CancellationToken ct = default);
-    Task<ChatMessage> SendAsync(long userId, long roomId, string type, string? content, decimal? latitude, decimal? longitude, CancellationToken ct = default);
+    Task<ChatMessage> SendAsync(long userId, long roomId, string type, string? content, decimal? latitude, decimal? longitude, string? fileId = null, CancellationToken ct = default);
     Task<int> UnreadAsync(long userId, CancellationToken ct = default);
     Task<Alert> CreateAlertAsync(long userId, string name, SearchFilters criteria, string frequency, CancellationToken ct = default);
     Task<IReadOnlyList<Alert>> AlertsAsync(long userId, CancellationToken ct = default);
@@ -181,10 +181,10 @@ public sealed class MessagingRepository(IStoredProcedureExecutor db) : IMessagin
         db.QueryAsync("sp_chat_messages_list",
             new ProcParams().Add("p_user_id", userId).Add("p_room_id", roomId).Add("p_limit", limit).Add("p_offset", offset), MarketplaceMappers.Message, ct);
 
-    public async Task<ChatMessage> SendAsync(long userId, long roomId, string type, string? content, decimal? latitude, decimal? longitude, CancellationToken ct = default) =>
+    public async Task<ChatMessage> SendAsync(long userId, long roomId, string type, string? content, decimal? latitude, decimal? longitude, string? fileId = null, CancellationToken ct = default) =>
         (await db.QuerySingleOrDefaultAsync("sp_chat_send",
             new ProcParams().Add("p_user_id", userId).Add("p_room_id", roomId).Add("p_type", type).Add("p_content", content)
-                .Add("p_latitude", latitude).Add("p_longitude", longitude), MarketplaceMappers.Message, ct))!;
+                .Add("p_latitude", latitude).Add("p_longitude", longitude).Add("p_file_id", fileId), MarketplaceMappers.Message, ct))!;
 
     public async Task<int> UnreadAsync(long userId, CancellationToken ct = default)
     {

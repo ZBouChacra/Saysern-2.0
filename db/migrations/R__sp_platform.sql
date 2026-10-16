@@ -132,6 +132,10 @@ BEGIN
      AND NOT EXISTS (SELECT 1 FROM lookup_values WHERE type_code = 'language' AND code = v_value AND is_active = 1) THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'INVALID_LANGUAGE';
   END IF;
+  IF p_key = 'Storage.Provider'
+     AND NOT EXISTS (SELECT 1 FROM lookup_values WHERE type_code = 'storage_provider' AND code = v_value AND is_active = 1) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'INVALID_STORAGE_PROVIDER';
+  END IF;
   -- settings that must stay consistent with each other
   IF p_key = 'Booking.MinDurationMinutes' THEN
     SELECT CAST(value_text AS DECIMAL(30,6)) INTO v_other FROM app_settings WHERE setting_key = 'Booking.MaxDurationMinutes';

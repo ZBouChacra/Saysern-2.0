@@ -153,8 +153,8 @@ public static class MarketplaceEndpoints
 
         g.MapPost("/rooms/{roomId:long}/messages", async (HttpContext ctx, long roomId, SendMessageInput input, IMessagingRepository chat, ISettingsService settings) =>
         {
-            var (type, content, lat, lng) = MarketplaceValidation.ValidateMessage(input, settings);
-            return Results.Json(await chat.SendAsync(ctx.UserId(), roomId, type, content, lat, lng), statusCode: StatusCodes.Status201Created);
+            var (type, content, lat, lng, fileId) = MarketplaceValidation.ValidateMessage(input, settings);
+            return Results.Json(await chat.SendAsync(ctx.UserId(), roomId, type, content, lat, lng, fileId), statusCode: StatusCodes.Status201Created);
         });
 
         g.MapGet("/unread-count", async (HttpContext ctx, IMessagingRepository chat) => Results.Ok(new { unread = await chat.UnreadAsync(ctx.UserId()) }));

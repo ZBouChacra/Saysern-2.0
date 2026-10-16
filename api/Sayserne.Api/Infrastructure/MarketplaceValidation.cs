@@ -15,7 +15,7 @@ public sealed record BookingInput(long? ProfessionalId, long? ProfessionId, Date
 public sealed record StatusInput(string? Status);
 public sealed record ReviewInput(long? AppointmentId, int? Rating, string? Comment);
 public sealed record StartChatInput(long? UserId);
-public sealed record SendMessageInput(string? Type, string? Content, decimal? Latitude, decimal? Longitude);
+public sealed record SendMessageInput(string? Type, string? Content, decimal? Latitude, decimal? Longitude, string? FileId = null);
 public sealed record AlertInput(string? Name, SearchFilters? SearchCriteria, string? Frequency);
 public sealed record FlagsInput(bool IsPremium, bool IsStarred);
 
@@ -44,7 +44,8 @@ public static partial class MarketplaceValidation
     private static string? Url(string? v, string field, int max, Errs e)
     {
         var t = Clean(v, field, max, e);
-        if (t != null && (!Uri.TryCreate(t, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))) e.Add(field, "Enter a valid http(s) link.");
+        if (t != null && !System.Text.RegularExpressions.Regex.IsMatch(t, "^/api/files/[0-9a-f]{32}$")            // an uploaded file (ownership is checked by the database)
+            && (!Uri.TryCreate(t, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))) e.Add(field, "Enter a valid http(s) link or upload a file.");
         return t;
     }
 
@@ -158,7 +159,7 @@ public static partial class MarketplaceValidation
         return (i.StartsAt!.Value.UtcDateTime, duration, description);
     }
 
-    public static (string Type, string? Content, decimal? Lat, decimal? Lng) ValidateMessage(SendMessageInput i, ISettingsService settings)
+    public static (string Type, string? Content, decimal? Lat, decimal? Lng, string? FileId) ValidateMessage(SendMessageInput i, ISettingsService settings)
     {
         var e = new Errs();
         var type = (i.Type ?? "text").Trim().ToLowerInvariant();
@@ -172,9 +173,14 @@ public static partial class MarketplaceValidation
             if (i.Latitude is null or < -90 or > 90) e.Add("latitude", "Between -90 and 90.");
             if (i.Longitude is null or < -180 or > 180) e.Add("longitude", "Between -180 and 180.");
         }
-        else e.Add("type", "Must be text or location.");
+        else if (type is "image" or "video")
+        {
+            if (i.FileId is null || !System.Text.RegularExpressions.Regex.IsMatch(i.FileId, "^[0-9a-f]{32}$")) e.Add("fileId", "Upload the file first.");
+            content = Clean(i.Content, "content", settings.GetInt("Chat.MaxMessageLength"), e);   // optional caption
+        }
+        else e.Add("type", "Must be text, location, image or video.");
         e.ThrowIfAny();
-        return (type, content, i.Latitude, i.Longitude);
+        return (type, content, i.Latitude, i.Longitude, type is "image" or "video" ? i.FileId : null);
     }
 
     public static (string Name, SearchFilters Criteria, string Frequency) ValidateAlert(AlertInput i, ISettingsService settings)

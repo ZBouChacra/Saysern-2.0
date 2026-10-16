@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Sayserne.Api.Auth;
 using Sayserne.Api.Data;
+using Sayserne.Api.Jobs;
 using Sayserne.Api.Platform;
 
 namespace Sayserne.Api.Endpoints;
@@ -86,6 +87,12 @@ public static class AdminPlatformEndpoints
             if (b.CategoryId is null or <= 0) throw Invalid("categoryId", "Choose a category.");
             return Results.Ok(await platform.SaveServiceAsync(ctx.UserId(), id, b.CategoryId.Value, b.Name ?? "", b.NameAr, b.Description, b.DescriptionAr, b.IsBlocked));
         }).RequirePermission("catalog.manage");
+
+        // ---------------- background jobs
+        g.MapGet("/jobs", async (IJobQueue jobs, string? status, string? type, int? page, int? pageSize) =>
+            Results.Ok(await jobs.ListAsync(status, type, page ?? 1, pageSize ?? 25))).RequirePermission("jobs.read");
+        g.MapGet("/jobs/stats", async (IJobQueue jobs) => Results.Ok(await jobs.StatsAsync())).RequirePermission("jobs.read");
+        g.MapPost("/jobs/{id:long}/retry", async (HttpContext ctx, long id, IJobQueue jobs) => Results.Ok(await jobs.RetryAsync(ctx.UserId(), id))).RequirePermission("jobs.manage");
 
         // ---------------- audit log (read-only: there is no way to change or delete an entry through the API)
         g.MapGet("/audit", async (IPlatformRepository platform, DateTimeOffset? from, DateTimeOffset? to, long? actorId, string? action, string? entityType, string? search, int? page, int? pageSize) =>

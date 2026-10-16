@@ -2,6 +2,7 @@ using System.Buffers.Text;
 using System.Collections.Concurrent;
 using System.Data;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
@@ -100,6 +101,25 @@ public sealed class TestDatabase
         await ScriptRunner.ExecuteAsync(conn, sql, default);
     }
 
+    /// <summary>Test-only time travel for the job queue (the app account cannot edit tables, by design).</summary>
+    public async Task RunFixtureAsync(string name, long id = 0)
+    {
+        var sql = (await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "fixtures", name))).Replace("{{ID}}", id.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        await using var conn = new MySqlConnection(MigratorConnection);
+        await conn.OpenAsync();
+        await ScriptRunner.ExecuteAsync(conn, sql, default);
+    }
+
+    /// <summary>Seconds from now until the job's next run (negative = already due).</summary>
+    public async Task<double> JobRunInAsync(long id)
+    {
+        var sql = (await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "fixtures", "jobs_read_run_at.sql"))).Replace("{{ID}}", id.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        await using var conn = new MySqlConnection(MigratorConnection);
+        await conn.OpenAsync();
+        await using var cmd = new MySqlCommand(sql, conn);
+        return Convert.ToDouble(await cmd.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture);
+    }
+
     private MySqlDataSource? _dataSource;
     private readonly object _dataSourceLock = new();
     /// <summary>One shared connection pool per test database (creating a pool per call exhausts MySQL's connection limit).</summary>
@@ -137,6 +157,8 @@ public sealed class TestClient
         return await ReadAsync(response);
     }
 
+    public Task<(HttpStatusCode Status, JsonElement Body)> c_PostJson(string path) => PostAsync(path, new { file = "not multipart" });
+
     public async Task<(HttpStatusCode Status, JsonElement Body)> PutAsync(string path, object? body = null)
     {
         using var response = await Http.PutAsJsonAsync(path, body ?? new { });
@@ -153,6 +175,25 @@ public sealed class TestClient
     {
         using var response = await Http.GetAsync(path);
         return await ReadAsync(response);
+    }
+
+    /// <summary>Uploads one file as multipart/form-data (field name "file").</summary>
+    public async Task<(HttpStatusCode Status, JsonElement Body)> UploadAsync(string path, byte[] bytes, string fileName = "photo.jpg")
+    {
+        using var form = new MultipartFormDataContent();
+        var part = new ByteArrayContent(bytes);
+        part.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+        form.Add(part, "file", fileName);
+        using var response = await Http.PostAsync(path, form);
+        return await ReadAsync(response);
+    }
+
+    public async Task<(HttpStatusCode Status, byte[] Bytes, HttpResponseHeaders Headers, HttpContentHeaders ContentHeaders)> GetBytesAsync(string path, string? range = null)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, path);
+        if (range != null) request.Headers.TryAddWithoutValidation("Range", range);
+        using var response = await Http.SendAsync(request);
+        return (response.StatusCode, await response.Content.ReadAsByteArrayAsync(), response.Headers, response.Content.Headers);
     }
 
     public static async Task<(HttpStatusCode, JsonElement)> ReadAsync(HttpResponseMessage response)
@@ -176,7 +217,7 @@ public sealed class ApiHost : IAsyncDisposable
     public required TestDatabase Database { get; init; }
     public Uri BaseUri => new(App.Urls.First());
 
-    public static async Task<ApiHost> StartAsync(Dictionary<string, string?>? overrides = null, bool withGoogle = false, TestDatabase? database = null, TimeProvider? clock = null, bool pinRateLimit = true)
+    public static async Task<ApiHost> StartAsync(Dictionary<string, string?>? overrides = null, bool withGoogle = false, TestDatabase? database = null, TimeProvider? clock = null, bool pinRateLimit = true, Action<IServiceCollection>? services = null)
     {
         var db = database ?? await TestEnv.GetDatabaseAsync();
         var google = withGoogle ? await FakeGoogle.StartAsync() : null;
@@ -185,6 +226,8 @@ public sealed class ApiHost : IAsyncDisposable
             ["ConnectionStrings:Default"] = db.AppConnection,
             ["Auth:PasswordIterations"] = "2000",          // fast hashing for tests only (deploy-time setting)
             ["Settings:RefreshSeconds"] = "3600",           // tests refresh explicitly
+            ["Jobs:Enabled"] = "false",                     // tests run due jobs themselves (JobRunner.RunOnceAsync)
+            ["Storage:DiskPath"] = Path.Combine(Path.GetTempPath(), "sayserne-test-storage-" + Guid.NewGuid().ToString("N")),
         };
         // "Auth:Xyz" keys given by tests pin the runtime setting "Auth.Xyz" for this host only (other tests share the database, so it is never written there)
         var pinned = new Dictionary<string, string>();
@@ -210,20 +253,24 @@ public sealed class ApiHost : IAsyncDisposable
             b.Configuration.AddInMemoryCollection(settings);
             b.Services.AddSingleton(new SettingOverrides(pinned));
             if (clock != null) b.Services.AddSingleton(clock);
+            services?.Invoke(b.Services);
             b.WebHost.UseUrls("http://127.0.0.1:0");
             b.Logging.ClearProviders();
         }, "Development");
         await app.StartAsync();
-        return new ApiHost { App = app, Google = google, Database = db };
+        return new ApiHost { App = app, Google = google, Database = db, StoragePath = settings["Storage:DiskPath"]! };
     }
 
     public TestClient NewClient(bool csrfHeader = true) => new(BaseUri, csrfHeader);
+
+    public required string StoragePath { get; init; }
 
     public async ValueTask DisposeAsync()
     {
         await App.StopAsync();
         await App.DisposeAsync();
         if (Google != null) await Google.DisposeAsync();
+        try { if (Directory.Exists(StoragePath)) Directory.Delete(StoragePath, recursive: true); } catch (IOException) { /* temp folder */ }
     }
 
     public static string UniqueEmail(string prefix = "user") => $"{prefix}.{Guid.NewGuid():N}@example.test";
@@ -356,10 +403,10 @@ public sealed class IsolatedHost : IAsyncDisposable
     public required ApiHost Host { get; init; }
     public required TestDatabase Db { get; init; }
 
-    public static async Task<IsolatedHost> StartAsync(Dictionary<string, string?>? overrides = null, bool withGoogle = false, TimeProvider? clock = null, bool pinRateLimit = true)
+    public static async Task<IsolatedHost> StartAsync(Dictionary<string, string?>? overrides = null, bool withGoogle = false, TimeProvider? clock = null, bool pinRateLimit = true, Action<IServiceCollection>? services = null)
     {
         var db = await TestDatabase.CreateAsync();
-        return new IsolatedHost { Db = db, Host = await ApiHost.StartAsync(overrides, withGoogle, db, clock, pinRateLimit) };
+        return new IsolatedHost { Db = db, Host = await ApiHost.StartAsync(overrides, withGoogle, db, clock, pinRateLimit, services) };
     }
 
     public async ValueTask DisposeAsync()
