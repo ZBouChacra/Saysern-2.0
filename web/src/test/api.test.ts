@@ -137,3 +137,54 @@ describe("marketplace calls", () => {
     expect(errorMessage(new ApiError(409, "REVIEW_EXISTS"))).toContain("already reviewed");
   });
 });
+
+describe("file uploads", () => {
+  const photo = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])], "me.jpg", { type: "image/jpeg" });
+
+  it("posts the file as multipart form data with the CSRF header and no hand-made content type", async () => {
+    const fn = mockFetch(201, { id: "a".repeat(32), status: "ready", kind: "image", url: "/api/files/" + "a".repeat(32) });
+    const result = await api.uploadFile(photo, "profile_photo");
+    const [url, init] = fn.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/files?purpose=profile_photo");
+    expect(init.method).toBe("POST");
+    expect(init.credentials).toBe("same-origin");
+    expect((init.headers as Record<string, string>)["X-Requested-With"]).toBe("sayserne-web");
+    expect(Object.keys(init.headers as Record<string, string>)).not.toContain("Content-Type");   // the browser must add the multipart boundary itself
+    const form = init.body as FormData;
+    expect(form).toBeInstanceOf(FormData);
+    expect((form.get("file") as File).name).toBe("me.jpg");
+    expect(result.status).toBe("ready");
+  });
+
+  it("names the conversation for chat media and reports a video as still processing", async () => {
+    const fn = mockFetch(202, { id: "b".repeat(32), status: "processing", kind: "video", url: "/api/files/" + "b".repeat(32) });
+    const result = await api.uploadFile(photo, "chat_media", 7);
+    expect((fn.mock.calls[0] as unknown as [string])[0]).toBe("/api/files?purpose=chat_media&roomId=7");
+    expect(result).toMatchObject({ status: "processing", kind: "video" });
+  });
+
+  it("turns refusals into coded errors, including a bare 413 from a proxy", async () => {
+    mockFetch(400, { error: "UNSUPPORTED_FILE" });
+    expect((await api.uploadFile(photo, "profile_photo").catch(e => e)).code).toBe("UNSUPPORTED_FILE");
+    mockFetch(413);
+    const tooBig = await api.uploadFile(photo, "profile_photo").catch(e => e);
+    expect(tooBig).toBeInstanceOf(ApiError);
+    expect(tooBig.code).toBe("FILE_TOO_LARGE");
+    mockFetch(429, { error: "TooManyRequests" });
+    expect((await api.uploadFile(photo, "profile_photo").catch(e => e)).code).toBe("TooManyRequests");
+  });
+
+  it("asks for a file's status by id and shows the server's reason for a failure", async () => {
+    const fn = mockFetch(200, { id: "c".repeat(32), status: "failed", kind: "video", failureCode: "VIDEO_TOO_LONG" });
+    const status = await api.fileStatus("c".repeat(32));
+    expect((fn.mock.calls[0] as unknown as [string])[0]).toBe("/api/files/" + "c".repeat(32) + "/status");
+    setTexts({ "error.VIDEO_TOO_LONG": "This video is too long. Please choose a shorter one." });
+    expect(errorMessage(status.failureCode)).toContain("too long");
+  });
+
+  it("sends an image message by file id", async () => {
+    const fn = mockFetch(201, { id: 1 });
+    await api.send(3, { type: "image", fileId: "d".repeat(32), content: "the invoice" });
+    expect(JSON.parse((fn.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ type: "image", fileId: "d".repeat(32), content: "the invoice" });
+  });
+});

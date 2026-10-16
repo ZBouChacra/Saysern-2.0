@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { ApiError, api, errorMessage, type Category, type PrivateProfile, type Profession, type ProfessionInput, type Service, type Slot } from "../api";
-import { CityInput, LookupSelect, useWeekdays } from "../components";
+import { CityInput, LookupSelect, PhotoPicker, useWeekdays } from "../components";
 import { useConfig } from "../config";
 
 const blankToUndef = (v: string | undefined) => (v === undefined || v.trim() === "" ? undefined : v.trim());
@@ -74,6 +74,8 @@ function ProfileForm({ profile, onSaved }: { profile: PrivateProfile; onSaved: (
       <div className="grid2">{text("firstName", "First name")}{text("lastName", "Last name")}</div>
       <div className="grid2">{text("phone", "Phone")}{text("dateOfBirth", "Date of birth", "date")}</div>
       <div className="grid2">
+        <PhotoPicker label="Profile photo" purpose="profile_photo" value={f.profilePhoto} onChange={v => set({ profilePhoto: v })} />
+        <PhotoPicker label="Banner" purpose="banner_photo" value={f.bannerPhoto} onChange={v => set({ bannerPhoto: v })} />
         <label>Sex<LookupSelect type="sex" value={f.sex} onChange={v => set({ sex: v })} /></label>
         <label>Nationality<LookupSelect type="nationality" value={f.nationality} onChange={v => set({ nationality: v })} /></label>
       </div>

@@ -93,12 +93,12 @@ public static class FileEndpoints
             if (sniffed.Kind == MediaKind.Video)
             {
                 await jobs.EnqueueAsync(MediaProcessJobHandler.JobType, new { fileId = id }, dedupeKey: "media:" + id, ct: ctx.RequestAborted);
-                return Results.Json(new { id, status = "processing", url = Url(id) }, statusCode: StatusCodes.Status202Accepted);
+                return Results.Json(new { id, status = "processing", kind = "video", url = Url(id) }, statusCode: StatusCodes.Status202Accepted);
             }
             try
             {
                 var ready = await ingest.ProcessAsync(file, ctx.RequestAborted);
-                return Results.Json(new { id, status = "ready", url = Url(id), width = ready.Width, height = ready.Height, bytes = ready.StoredBytes }, statusCode: StatusCodes.Status201Created);
+                return Results.Json(new { id, status = "ready", kind = "image", url = Url(id), width = ready.Width, height = ready.Height, bytes = ready.StoredBytes }, statusCode: StatusCodes.Status201Created);
             }
             catch (MediaException ex)
             {
@@ -137,6 +137,6 @@ public static class FileEndpoints
     {
         var file = id.Length == 32 ? await files.GetAsync(id, ctx.RequestAborted) : null;
         if (file is null || file.OwnerId != ctx.UserId()) throw new AppException("FILE_NOT_FOUND", 404);
-        return Results.Ok(new { id = file.Id, status = file.Status, failureCode = file.FailureCode, url = file.Status == "ready" ? Url(file.Id) : null, width = file.Width, height = file.Height });
+        return Results.Ok(new { id = file.Id, status = file.Status, kind = file.MediaKind, failureCode = file.FailureCode, url = file.Status == "ready" ? Url(file.Id) : null, width = file.Width, height = file.Height });
     }
 }

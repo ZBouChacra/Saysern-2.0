@@ -56,3 +56,10 @@ label.check { display: flex; align-items: center; gap: .4rem; font-weight: 500; 
 .thread { height: 340px; overflow-y: auto; display: flex; flex-direction: column; gap: .5rem; padding: .5rem; } .bubble { max-width: 75%; padding: .5rem .8rem; border-radius: 14px; background: var(--bg); border: 1px solid var(--line); align-self: flex-start; word-wrap: anywhere; }
 .bubble.mine { align-self: flex-end; background: var(--green); color: #fff; border-color: var(--green); } .bubble.mine .muted, .bubble.mine a { color: #e6f4ef; } .composer input { flex: 1; max-width: none; }
 .topbar nav { flex-wrap: wrap; } @media (max-width: 700px) { .chat { grid-template-columns: 1fr; } .chat aside { border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 1rem; } .listing { flex-wrap: wrap; } }
+
+/* uploaded photos and chat media */
+.avatar.photo { object-fit: cover; background: var(--line); }
+.photo-picker { margin: .6rem 0; } .photo-picker .label { display: block; font-weight: 600; margin-bottom: .3rem; } .photo-picker .row { align-items: center; gap: .6rem; }
+.banner-preview { display: block; width: 100%; max-height: 120px; object-fit: cover; border-radius: 10px; margin-bottom: .4rem; }
+.file-btn { cursor: pointer; } .chat-media { display: block; max-width: min(280px, 100%); max-height: 260px; border-radius: 10px; }
+.bubble .caption { margin-top: .3rem; } .pending { opacity: .8; font-style: italic; }

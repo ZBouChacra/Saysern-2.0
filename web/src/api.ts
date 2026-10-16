@@ -55,6 +55,19 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return data as T;
 }
 
+/** Uploads one file (multipart). The server decides what it really is, shrinks it, and answers 201 (image, ready) or 202 (video, being compressed). */
+async function upload(file: File, purpose: UploadPurpose, roomId?: number): Promise<UploadResult> {
+  const form = new FormData();
+  form.append("file", file, file.name);
+  const response = await fetch(`/api/files?purpose=${encodeURIComponent(purpose)}${roomId === undefined ? "" : `&roomId=${roomId}`}`, {
+    method: "POST", credentials: "same-origin", headers: { "X-Requested-With": "sayserne-web" }, body: form,   // no Content-Type: the browser adds the multipart boundary
+  });
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : undefined;
+  if (!response.ok) throw new ApiError(response.status, data?.error ?? (response.status === 413 ? "FILE_TOO_LARGE" : response.status === 429 ? "TooManyRequests" : "UNKNOWN"), data?.errors);
+  return data as UploadResult;
+}
+
 // ------------------------------------------------------------------ marketplace types
 export interface Category { id: number; name: string; nameAr?: string; icon?: string; isBlocked: boolean }
 export interface Service { id: number; categoryId: number; name: string; nameAr?: string; isBlocked: boolean }
@@ -111,7 +124,11 @@ export interface ChatRoomSummary {
   id: number; otherUserId: number; otherFirstName: string; otherLastName: string; lastMessageAt: string; lastMessageType?: string;
   lastMessageContent?: string; lastMessageSenderId?: number; unreadCount: number;
 }
-export interface ChatMessage { id: number; roomId: number; senderId: number; messageType: "text" | "location"; content?: string; latitude?: number; longitude?: number; isRead: boolean; createdAt: string }
+export interface ChatMessage { id: number; roomId: number; senderId: number; messageType: "text" | "location" | "image" | "video"; content?: string; latitude?: number; longitude?: number; fileId?: string; isRead: boolean; createdAt: string }
+
+export type UploadPurpose = "profile_photo" | "banner_photo" | "chat_media";
+export interface UploadResult { id: string; status: "ready" | "processing"; kind: "image" | "video"; url: string; width?: number; height?: number; bytes?: number }
+export interface FileStatus { id: string; status: "processing" | "ready" | "failed"; kind: "image" | "video"; failureCode?: string; url?: string; width?: number; height?: number }
 export interface Alert { id: number; name: string; searchCriteria: SearchFilters; frequency: string; createdAt: string }
 
 /** Query string for the search API and the search page URL; empty values are skipped. */
@@ -168,10 +185,12 @@ export const api = {
   setStatus: (id: number, status: "approved" | "cancelled" | "completed") => request<Appointment>("POST", `/appointments/${id}/status`, { status }),
   eligible: (professionalId: number) => request<Eligible[]>("GET", `/reviews/eligible?professionalId=${professionalId}`),
   review: (appointmentId: number, rating: number, comment?: string) => request<{ id: number }>("POST", "/reviews", { appointmentId, rating, comment }),
+  uploadFile: upload,
+  fileStatus: (id: string) => request<FileStatus>("GET", `/files/${id}/status`),
   rooms: () => request<ChatRoomSummary[]>("GET", "/chat/rooms"),
   startChat: (userId: number) => request<{ id: number }>("POST", "/chat/rooms", { userId }),
   messages: (roomId: number) => request<ChatMessage[]>("GET", `/chat/rooms/${roomId}/messages?limit=100`),
-  send: (roomId: number, m: { type?: "text" | "location"; content?: string; latitude?: number; longitude?: number }) => request<ChatMessage>("POST", `/chat/rooms/${roomId}/messages`, m),
+  send: (roomId: number, m: { type?: "text" | "location" | "image" | "video"; content?: string; latitude?: number; longitude?: number; fileId?: string }) => request<ChatMessage>("POST", `/chat/rooms/${roomId}/messages`, m),
   unread: () => request<{ unread: number }>("GET", "/chat/unread-count").then(r => r.unread),
   alerts: () => request<Alert[]>("GET", "/alerts"),
   createAlert: (name: string, searchCriteria: SearchFilters, frequency: Alert["frequency"]) => request<Alert>("POST", "/alerts", { name, searchCriteria, frequency }),

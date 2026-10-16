@@ -42,6 +42,8 @@ export interface Role { id: number; name: string; description?: string; userCoun
 export interface Category { id: number; name: string; nameAr?: string; description?: string; descriptionAr?: string; icon?: string; isBlocked: boolean }
 export interface Service { id: number; categoryId: number; name: string; nameAr?: string; description?: string; descriptionAr?: string; isBlocked: boolean }
 export interface AuditRow { id: number; occurredAt: string; actorId?: number; actorName?: string; action: string; entityType: string; entityId?: string; summary: string; details?: unknown; ip?: string }
+export interface JobRow { id: number; type: string; payload?: unknown; status: "pending" | "running" | "done" | "failed"; attempts: number; maxAttempts: number; runAt: string; lastError?: string; createdAt: string; finishedAt?: string }
+export interface JobStat { type: string; status: string; count: number }
 export interface AuditFilter { from?: string; to?: string; actorId?: string; action?: string; entityType?: string; search?: string; page?: number; pageSize?: number }
 
 export const api = {
@@ -86,6 +88,9 @@ export const api = {
   saveCategory: (id: number | null, c: Omit<Category, "id">) => id === null ? request<Category>("POST", "/admin/catalog/categories", c) : request<Category>("PUT", `/admin/catalog/categories/${id}`, c),
   saveService: (id: number | null, s: Omit<Service, "id">) => id === null ? request<Service>("POST", "/admin/catalog/services", s) : request<Service>("PUT", `/admin/catalog/services/${id}`, s),
 
+  jobs: (status: string, type: string, page: number) => request<Paged<JobRow>>("GET", `/admin/jobs${q({ status, type, page, pageSize: 25 })}`),
+  jobStats: () => request<JobStat[]>("GET", "/admin/jobs/stats"),
+  retryJob: (id: number) => request<JobRow>("POST", `/admin/jobs/${id}/retry`),
   audit: (f: AuditFilter) => request<Paged<AuditRow>>("GET", `/admin/audit${q({ ...f })}`),
 };
 

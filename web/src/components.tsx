@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
-import type { Listing } from "./api";
+import { useState, type ChangeEvent } from "react";
+import { api, errorMessage, type Listing, type UploadPurpose } from "./api";
 import { useLookup } from "./config";
 
 export function Stars({ value, count }: { value: number; count?: number }) {
@@ -20,7 +21,7 @@ export function ListingCard({ l }: { l: Listing }) {
   const countries = useLookup("country");
   return (
     <Link to={`/professional/${l.userId}`} className="listing">
-      <div className="avatar">{l.firstName[0]}</div>
+      <Avatar photo={l.profilePhoto} name={l.firstName} />
       <div className="grow">
         <strong>{fullName(l.firstName, l.lastName)}</strong>
         {l.isPremium && <span className="pill ok">premium</span>} {l.isStarred && <span className="pill">★ featured</span>}
@@ -32,6 +33,38 @@ export function ListingCard({ l }: { l: Listing }) {
         <div>{money(l.costPerHour)}</div>
       </div>
     </Link>
+  );
+}
+
+/** A person's photo, or their initial when they have none. */
+export function Avatar({ photo, name, big }: { photo?: string | null; name: string; big?: boolean }) {
+  return photo
+    ? <img className={`avatar photo ${big ? "big" : ""}`} src={photo} alt="" loading="lazy" />
+    : <div className={`avatar ${big ? "big" : ""}`} aria-hidden="true">{name[0]}</div>;
+}
+
+/** Choose an image, upload it (the server shrinks and checks it) and hand back its address. */
+export function PhotoPicker({ label, purpose, value, onChange }: { label: string; purpose: Extract<UploadPurpose, "profile_photo" | "banner_photo">; value?: string; onChange: (url?: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function pick(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setBusy(true); setError(null);
+    try { onChange((await api.uploadFile(file, purpose)).url); } catch (err) { setError(errorMessage(err)); } finally { setBusy(false); }
+  }
+  return (
+    <div className="photo-picker">
+      <span className="label">{label}</span>
+      {value && <img src={value} alt="" className={purpose === "banner_photo" ? "banner-preview" : "avatar photo big"} />}
+      <div className="row">
+        <label className="btn small secondary file-btn">{busy ? "Uploading…" : value ? "Change" : "Upload"}
+          <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" onChange={pick} disabled={busy} hidden aria-label={label} /></label>
+        {value && <button type="button" className="link" onClick={() => onChange(undefined)}>Remove</button>}
+      </div>
+      {error && <span className="field-error" role="alert">{error}</span>}
+    </div>
   );
 }
 

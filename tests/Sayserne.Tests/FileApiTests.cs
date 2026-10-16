@@ -33,6 +33,7 @@ public class FileApiTests
         var (status, body) = await Upload(c, original);
         Assert.Equal(HttpStatusCode.Created, status);
         Assert.Equal("ready", body.GetProperty("status").GetString());
+        Assert.Equal("image", body.GetProperty("kind").GetString());
         Assert.True(body.GetProperty("width").GetInt32() <= 1600 && body.GetProperty("height").GetInt32() <= 1600);
         Assert.True(body.GetProperty("bytes").GetInt64() < original.Length / 5);
         var url = body.GetProperty("url").GetString()!;
@@ -248,7 +249,7 @@ public class FileApiTests
         var (status, body) = await Upload(a, source, purpose: "chat_media", roomId: room, name: "clip.mp4");
         Assert.Equal(HttpStatusCode.Accepted, status);
         var id = body.GetProperty("id").GetString()!; var url = body.GetProperty("url").GetString()!;
-        Assert.Equal("processing", body.GetProperty("status").GetString());
+        Assert.Equal(("processing", "video"), (body.GetProperty("status").GetString(), body.GetProperty("kind").GetString()));
         Assert.Equal(HttpStatusCode.NotFound, (await a.GetBytesAsync(url)).Status);                                                         // nothing to serve yet
         var (ns, nb) = await a.PostAsync($"/api/chat/rooms/{room}/messages", new { type = "video", fileId = id });
         Assert.Equal((HttpStatusCode.Conflict, "FILE_NOT_READY"), (ns, TestClient.Error(nb)));

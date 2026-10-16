@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, errorMessage, type ChatMessage, type ChatRoomSummary } from "../api";
 import { useAuth } from "../auth";
+import { useConfig } from "../config";
 import { fullName, when } from "../components";
+
+/** A file being sent: uploading, being compressed by the server (videos), or refused. */
+interface Pending { key: string; name: string; fileId?: string; kind?: "image" | "video"; status: "uploading" | "processing" | "failed"; error?: string }
 
 export default function Chats() {
   const { roomId } = useParams();
@@ -14,6 +18,9 @@ export default function Chats() {
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
+  const cfg = useConfig();
+  const videoOn = cfg.bool("Media.VideoEnabled");
+  const [pending, setPending] = useState<Pending[]>([]);
 
   const loadRooms = useCallback(() => { api.rooms().then(setRooms).catch(() => undefined); }, []);
   const loadMessages = useCallback(() => {
@@ -31,6 +38,38 @@ export default function Chats() {
     if (active === null || !text.trim()) return;
     try { await api.send(active, { content: text.trim() }); setText(""); loadMessages(); } catch (err) { setError(errorMessage(err)); }
   }
+  const patchPending = (key: string, patch: Partial<Pending>) => setPending(list => list.map(p => (p.key === key ? { ...p, ...patch } : p)));
+  const dropPending = (key: string) => setPending(list => list.filter(p => p.key !== key));
+
+  async function attach(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || active === null) return;
+    const key = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setPending(list => [...list, { key, name: file.name, status: "uploading" }]);
+    try {
+      const up = await api.uploadFile(file, "chat_media", active);
+      if (up.status === "ready") { await api.send(active, { type: up.kind, fileId: up.id }); dropPending(key); loadMessages(); }
+      else patchPending(key, { fileId: up.id, kind: up.kind, status: "processing" });   // a video: the server compresses it, we send it when it is ready
+    } catch (err) { patchPending(key, { status: "failed", error: errorMessage(err) }); }
+  }
+
+  // while a video is being compressed, ask the server every couple of seconds; send it as soon as it is ready
+  useEffect(() => {
+    const waiting = pending.filter(p => p.status === "processing" && p.fileId);
+    if (waiting.length === 0 || active === null) return;
+    const timer = setInterval(async () => {
+      for (const p of waiting) {
+        try {
+          const s = await api.fileStatus(p.fileId!);
+          if (s.status === "ready") { await api.send(active, { type: p.kind, fileId: p.fileId }); dropPending(p.key); loadMessages(); }
+          else if (s.status === "failed") patchPending(p.key, { status: "failed", error: errorMessage(s.failureCode ?? "PROCESSING_FAILED") });
+        } catch { /* try again on the next tick */ }
+      }
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [pending, active, loadMessages]);
+
   function shareLocation() {
     if (active === null || !navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
@@ -47,7 +86,7 @@ export default function Chats() {
         {rooms.map(r => (
           <button key={r.id} className={`room ${r.id === active ? "active" : ""}`} onClick={() => navigate(`/chats/${r.id}`)}>
             <strong>{fullName(r.otherFirstName, r.otherLastName)}</strong>{r.unreadCount > 0 && <span className="badge">{r.unreadCount}</span>}
-            <div className="muted small">{r.lastMessageType === "location" ? "📍 Location" : r.lastMessageContent ?? "No messages yet"}</div>
+            <div className="muted small">{r.lastMessageType === "location" ? "📍 Location" : r.lastMessageType === "image" ? "🖼 Photo" : r.lastMessageType === "video" ? "🎬 Video" : r.lastMessageContent ?? "No messages yet"}</div>
           </button>
         ))}
       </aside>
@@ -57,10 +96,21 @@ export default function Chats() {
             <div className="thread" aria-live="polite">
               {messages.map(m => (
                 <div key={m.id} className={`bubble ${m.senderId === user?.id ? "mine" : ""}`}>
-                  {m.messageType === "location"
+                  {m.messageType === "image" && m.fileId
+                    ? <a href={`/api/files/${m.fileId}`} target="_blank" rel="noopener noreferrer"><img className="chat-media" src={`/api/files/${m.fileId}`} alt="Shared photo" loading="lazy" /></a>
+                    : m.messageType === "video" && m.fileId
+                    ? <video className="chat-media" controls preload="metadata" src={`/api/files/${m.fileId}`} aria-label="Shared video" />
+                    : m.messageType === "location"
                     ? <a href={`https://www.openstreetmap.org/?mlat=${m.latitude}&mlon=${m.longitude}#map=16/${m.latitude}/${m.longitude}`} target="_blank" rel="noopener noreferrer">📍 Shared location</a>
                     : m.content}
+                  {(m.messageType === "image" || m.messageType === "video") && m.content && <div className="caption">{m.content}</div>}
                   <div className="muted small">{when(m.createdAt)}</div>
+                </div>
+              ))}
+              {pending.map(p => (
+                <div key={p.key} className="bubble mine pending" role="status">
+                  {p.status === "failed" ? <><span className="error">{p.name}: {p.error}</span> <button className="link" onClick={() => dropPending(p.key)}>Dismiss</button></>
+                    : p.status === "processing" ? `Preparing ${p.name}… (videos are compressed first)` : `Uploading ${p.name}…`}
                 </div>
               ))}
               <div ref={bottom} />
@@ -68,6 +118,9 @@ export default function Chats() {
             {error && <p className="error" role="alert">{error} <Link to="/chats">Back</Link></p>}
             <form className="row composer" onSubmit={send}>
               <input value={text} onChange={e => setText(e.target.value)} placeholder="Type a message" maxLength={4000} aria-label="Message" />
+              <label className="btn secondary file-btn" title={videoOn ? "Send a photo or video" : "Send a photo"}>📎
+                <input type="file" hidden aria-label="Attach a file" onChange={attach}
+                  accept={"image/jpeg,image/png,image/gif,image/webp" + (videoOn ? ",video/mp4,video/quicktime,video/webm" : "")} /></label>
               <button type="button" className="btn secondary" onClick={shareLocation} title="Share my location">📍</button>
               <button className="btn" disabled={!text.trim()}>Send</button>
             </form>

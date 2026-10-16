@@ -4,6 +4,7 @@ import { useSession } from "./session";
 import Audit from "./pages/Audit";
 import Catalog from "./pages/Catalog";
 import Login from "./pages/Login";
+import Jobs from "./pages/Jobs";
 import Lookups from "./pages/Lookups";
 import Roles from "./pages/Roles";
 import Security from "./pages/Security";
@@ -18,6 +19,7 @@ const NAV: { to: string; label: string; perm?: string }[] = [
   { to: "/lookups", label: "Lookups", perm: "lookups.manage" },
   { to: "/translations", label: "Texts", perm: "translations.manage" },
   { to: "/catalog", label: "Catalog", perm: "catalog.manage" },
+  { to: "/jobs", label: "Background jobs", perm: "jobs.read" },
   { to: "/audit", label: "Audit log", perm: "audit.read" },
   { to: "/security", label: "My security" },
 ];
@@ -60,6 +62,7 @@ export default function App() {
             <Route path="/lookups" element={<Guard perm="lookups.manage"><Lookups /></Guard>} />
             <Route path="/translations" element={<Guard perm="translations.manage"><Translations /></Guard>} />
             <Route path="/catalog" element={<Guard perm="catalog.manage"><Catalog /></Guard>} />
+            <Route path="/jobs" element={<Guard perm="jobs.read"><Jobs /></Guard>} />
             <Route path="/audit" element={<Guard perm="audit.read"><Audit /></Guard>} />
             <Route path="/security" element={<Security />} />
             <Route path="*" element={<Navigate to="/" replace />} />

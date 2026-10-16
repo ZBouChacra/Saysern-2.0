@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, errorMessage, type Eligible, type ProfessionalPage, type ReviewItem } from "../api";
 import { useAuth } from "../auth";
-import { Stars, fullName, money, useWeekdays, when } from "../components";
+import { Avatar, Stars, fullName, money, useWeekdays, when } from "../components";
 import { useLookup } from "../config";
 
 export default function Professional() {
@@ -39,7 +39,7 @@ export default function Professional() {
     <main className="card wide">
       <div className="row spread">
         <div className="row">
-          <div className="avatar big">{profile.firstName[0]}</div>
+          <Avatar photo={profile.profilePhoto} name={profile.firstName} big />
           <div>
             <h1>{fullName(profile.firstName, profile.lastName)}</h1>
             <div className="muted">{[profile.city, countries.label(profile.country)].filter(Boolean).join(", ")}{profile.age ? ` · ${profile.age} yrs` : ""}</div>

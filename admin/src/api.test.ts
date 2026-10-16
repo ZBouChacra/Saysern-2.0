@@ -61,3 +61,18 @@ describe("error messages", () => {
     expect(errorMessage(new TypeError("Failed to fetch"))).toMatch(/network/i);
   });
 });
+
+describe("background jobs", () => {
+  it("lists with filters, reads stats and retries by id", async () => {
+    const fn = mockFetch(200, { items: [], total: 0, page: 1, pageSize: 25 });
+    await api.jobs("failed", "media.process", 2);
+    expect((fn.mock.calls[0] as unknown as [string])[0]).toBe("/api/admin/jobs?status=failed&type=media.process&page=2&pageSize=25");
+    const stats = mockFetch(200, [{ type: "media.process", status: "done", count: 3 }]);
+    expect(await api.jobStats()).toEqual([{ type: "media.process", status: "done", count: 3 }]);
+    expect((stats.mock.calls[0] as unknown as [string])[0]).toBe("/api/admin/jobs/stats");
+    const retry = mockFetch(200, { id: 9, status: "pending" });
+    await api.retryJob(9);
+    const [url, init] = retry.mock.calls[0] as unknown as [string, RequestInit];
+    expect([url, init.method]).toEqual(["/api/admin/jobs/9/retry", "POST"]);
+  });
+});
