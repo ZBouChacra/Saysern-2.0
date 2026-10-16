@@ -37,6 +37,7 @@ export default function Login() {
         <button className="btn" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
       </form>
       <GoogleButton />
+      <p className="muted"><Link to="/forgot-password">Forgot your password?</Link></p>
       <p className="muted">No account yet? <Link to="/register">Create one</Link></p>
     </main>
   );

@@ -48,6 +48,11 @@ BEGIN
     ROLLBACK;
     RESIGNAL;
   END;
+  IF (SELECT value_text FROM app_settings WHERE setting_key = 'Auth.RequireVerifiedEmail') = 'true'
+     AND (SELECT value_text FROM app_settings WHERE setting_key = 'Email.Provider') <> 'off'
+     AND NOT EXISTS (SELECT 1 FROM users WHERE id = p_client_id AND email_verified = 1) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'EMAIL_NOT_VERIFIED';
+  END IF;
 
   IF p_client_id = p_professional_id THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'CANNOT_BOOK_SELF';

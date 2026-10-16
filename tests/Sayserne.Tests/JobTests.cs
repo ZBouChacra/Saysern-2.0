@@ -89,6 +89,35 @@ public class JobQueueDatabaseTests
     }
 
     [Fact]
+    public async Task Heavy_contention_from_many_workers_never_surfaces_a_database_error_and_every_job_finishes_exactly_once()
+    {
+        var (db, q) = await NewAsync();
+        try
+        {
+            const int jobs = 120;
+            for (var i = 0; i < jobs; i++) await q.EnqueueAsync("demo.stress", new { i });
+            var done = new System.Collections.Concurrent.ConcurrentBag<long>();
+            var gate = new TaskCompletionSource();
+            var workers = Enumerable.Range(0, 12).Select(w => Task.Run(async () =>
+            {
+                await gate.Task;
+                for (var idle = 0; idle < 3;)
+                {
+                    var mine = await q.ClaimAsync($"stress-{w}", 4, 300);   // every call here would throw if a deadlock escaped
+                    if (mine.Count == 0) { idle++; await Task.Delay(15); continue; }
+                    foreach (var j in mine) { await q.CompleteAsync(j.Id, $"stress-{w}"); done.Add(j.Id); }
+                }
+            })).ToList();
+            await Task.Delay(100); gate.SetResult();
+            await Task.WhenAll(workers);
+            Assert.Equal(jobs, done.Count);
+            Assert.Equal(jobs, done.Distinct().Count());
+            Assert.Equal(jobs, (await q.ListAsync("done", "demo.stress", 1, 1)).Total);
+        }
+        finally { await db.DropAsync(); }
+    }
+
+    [Fact]
     public async Task A_job_whose_worker_died_is_taken_over_and_one_that_keeps_killing_workers_is_failed()
     {
         var (db, q) = await NewAsync();
@@ -309,5 +338,53 @@ public class JobRunnerTests
         var (s3, again) = await manager.PostAsync($"/api/admin/jobs/{job.Id}/retry");   // now pending, not failed
         Assert.Equal(HttpStatusCode.Conflict, s3);
         Assert.Equal("JOB_NOT_RETRYABLE", TestClient.Error(again));
+    }
+}
+
+public class JobQueueDeadlockRetryTests
+{
+    /// <summary>A database layer that throws chosen errors for the first N calls, then behaves.</summary>
+    private sealed class FlakyExecutor(Func<int, Exception?> failure) : Sayserne.Api.Data.IStoredProcedureExecutor
+    {
+        public int Calls;
+        private void Maybe() { var n = Interlocked.Increment(ref Calls); if (failure(n) is { } ex) throw ex; }
+        public Task<IReadOnlyList<T>> QueryAsync<T>(string procedure, Sayserne.Api.Data.ProcParams? args, Func<System.Data.Common.DbDataReader, T> map, CancellationToken ct = default) { Maybe(); return Task.FromResult<IReadOnlyList<T>>([]); }
+        public Task<T?> QuerySingleOrDefaultAsync<T>(string procedure, Sayserne.Api.Data.ProcParams? args, Func<System.Data.Common.DbDataReader, T> map, CancellationToken ct = default) where T : class { Maybe(); return Task.FromResult<T?>(null); }
+        public Task<(IReadOnlyList<T1> First, IReadOnlyList<T2> Second)> QueryTwoAsync<T1, T2>(string procedure, Sayserne.Api.Data.ProcParams? args, Func<System.Data.Common.DbDataReader, T1> map1, Func<System.Data.Common.DbDataReader, T2> map2, CancellationToken ct = default) { Maybe(); return Task.FromResult<(IReadOnlyList<T1>, IReadOnlyList<T2>)>(([], [])); }
+        public Task ExecuteAsync(string procedure, Sayserne.Api.Data.ProcParams? args, CancellationToken ct = default) { Maybe(); return Task.CompletedTask; }
+    }
+
+    /// <summary>The driver's exception constructors are internal; this builds one exactly as the driver would for a server error.</summary>
+    private static MySqlConnector.MySqlException ServerError(MySqlConnector.MySqlErrorCode code, string sqlState, string message) =>
+        (MySqlConnector.MySqlException)Activator.CreateInstance(typeof(MySqlConnector.MySqlException), System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic, null, new object[] { code, sqlState, message }, null)!;
+
+    private static MySqlConnector.MySqlException Deadlock() => ServerError(MySqlConnector.MySqlErrorCode.LockDeadlock, "40001", "Deadlock found when trying to get lock; try restarting transaction");
+
+    [Fact]
+    public async Task A_deadlock_is_retried_for_claim_complete_and_fail_and_then_succeeds()
+    {
+        var flaky = new FlakyExecutor(n => n <= 2 ? Deadlock() : null);
+        var q = new JobQueue(flaky);
+        Assert.Empty(await q.ClaimAsync("w", 1, 60));
+        Assert.Equal(3, flaky.Calls);                    // two deadlock victims, then the third try went through
+
+        var again = new FlakyExecutor(n => n <= 3 ? Deadlock() : null);
+        await new JobQueue(again).CompleteAsync(1, "w");
+        Assert.Equal(4, again.Calls);
+        var third = new FlakyExecutor(n => n == 1 ? Deadlock() : null);
+        await new JobQueue(third).FailAsync(1, "w", "boom", permanent: false);
+        Assert.Equal(2, third.Calls);
+    }
+
+    [Fact]
+    public async Task A_deadlock_that_never_clears_is_reported_after_a_few_tries_and_other_errors_are_never_retried()
+    {
+        var always = new FlakyExecutor(_ => Deadlock());
+        await Assert.ThrowsAsync<MySqlConnector.MySqlException>(() => new JobQueue(always).ClaimAsync("w", 1, 60));
+        Assert.Equal(6, always.Calls);                   // bounded: it does not spin forever
+
+        var other = new FlakyExecutor(_ => ServerError(MySqlConnector.MySqlErrorCode.AccessDenied, "28000", "Access denied"));
+        await Assert.ThrowsAsync<MySqlConnector.MySqlException>(() => new JobQueue(other).CompleteAsync(1, "w"));
+        Assert.Equal(1, other.Calls);                    // a real error is surfaced at once
     }
 }

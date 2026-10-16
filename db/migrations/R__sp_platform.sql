@@ -89,6 +89,7 @@ BEGIN
   DECLARE v_min DECIMAL(18,4);
   DECLARE v_max DECIMAL(18,4);
   DECLARE v_old VARCHAR(2000);
+  DECLARE v_default VARCHAR(2000);
   DECLARE v_num DECIMAL(30,6);
   DECLARE v_other DECIMAL(30,6);
   DECLARE v_value VARCHAR(2000);
@@ -98,16 +99,21 @@ BEGIN
     RESIGNAL;
   END;
 
-  SELECT value_type, min_value, max_value, value_text INTO v_type, v_min, v_max, v_old FROM app_settings WHERE setting_key = p_key;
+  SELECT value_type, min_value, max_value, value_text, default_text INTO v_type, v_min, v_max, v_old, v_default FROM app_settings WHERE setting_key = p_key;
   IF v_type IS NULL THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'SETTING_NOT_FOUND';
   END IF;
   SET v_value = TRIM(p_value);
-  IF v_value IS NULL OR CHAR_LENGTH(v_value) = 0 THEN
+  -- a value may be empty only for secrets (clearing one) and for settings whose default is empty
+  IF v_value IS NULL OR (CHAR_LENGTH(v_value) = 0 AND v_type <> 'secret' AND v_default <> '') THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'SETTING_INVALID';
   END IF;
 
-  IF v_type = 'int' THEN
+  IF v_type = 'secret' THEN
+    IF CHAR_LENGTH(v_value) > 1900 THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'SETTING_INVALID';
+    END IF;
+  ELSEIF v_type = 'int' THEN
     IF v_value NOT REGEXP '^-?[0-9]{1,15}$' THEN
       SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'SETTING_INVALID';
     END IF;
@@ -136,6 +142,18 @@ BEGIN
      AND NOT EXISTS (SELECT 1 FROM lookup_values WHERE type_code = 'storage_provider' AND code = v_value AND is_active = 1) THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'INVALID_STORAGE_PROVIDER';
   END IF;
+  IF p_key = 'Email.Provider' AND NOT EXISTS (SELECT 1 FROM lookup_values WHERE type_code = 'email_provider' AND code = v_value AND is_active = 1) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'SETTING_INVALID';
+  END IF;
+  IF p_key = 'Email.SmtpSecurity' AND NOT EXISTS (SELECT 1 FROM lookup_values WHERE type_code = 'smtp_security' AND code = v_value AND is_active = 1) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'SETTING_INVALID';
+  END IF;
+  IF p_key = 'Email.FromAddress' AND v_value NOT REGEXP '^[^@ ]+@[^@ ]+$' THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'SETTING_INVALID';
+  END IF;
+  IF p_key = 'Site.PublicUrl' AND v_value NOT REGEXP '^https?://[^ /]+(/[^ ]*[^ /])?$' THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'SETTING_INVALID';
+  END IF;
   -- settings that must stay consistent with each other
   IF p_key = 'Booking.MinDurationMinutes' THEN
     SELECT CAST(value_text AS DECIMAL(30,6)) INTO v_other FROM app_settings WHERE setting_key = 'Booking.MaxDurationMinutes';
@@ -153,8 +171,12 @@ BEGIN
 
   START TRANSACTION;
   UPDATE app_settings SET value_text = v_value, updated_at = UTC_TIMESTAMP(3), updated_by = p_actor_id WHERE setting_key = p_key;
-  CALL sp_audit_write(p_actor_id, 'settings.update', 'setting', p_key, CONCAT('Changed ', p_key, ' from ', v_old, ' to ', v_value),
-                      JSON_OBJECT('old', v_old, 'new', v_value), NULL);
+  IF v_type = 'secret' THEN   -- a secret's value (even encrypted) never goes into the audit log
+    CALL sp_audit_write(p_actor_id, 'settings.update', 'setting', p_key, CONCAT(IF(CHAR_LENGTH(v_value) = 0, 'Cleared ', 'Changed '), p_key, ' (secret)'), JSON_OBJECT('secret', TRUE), NULL);
+  ELSE
+    CALL sp_audit_write(p_actor_id, 'settings.update', 'setting', p_key, CONCAT('Changed ', p_key, ' from ', v_old, ' to ', v_value),
+                        JSON_OBJECT('old', v_old, 'new', v_value), NULL);
+  END IF;
   COMMIT;
   SELECT setting_key, group_name, value_type, value_text, default_text, min_value, max_value, description, is_public, updated_at, updated_by
   FROM app_settings WHERE setting_key = p_key;

@@ -16,6 +16,11 @@ public sealed class AuthOptions
 public static class AuthSession
 {
     public const string RoleAdmin = "admin";
+    public const string PasswordClaim = "pwd";
+
+    /// <summary>A short, non-reversible marker of the password a session was opened with. Changing the password (reset) therefore ends every older session.</summary>
+    public static string PasswordFingerprint(UserRecord user) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(user.PasswordHash ?? "")))[..16];
 
     public static Task SignInAsync(HttpContext ctx, UserRecord user)
     {
@@ -25,6 +30,7 @@ public static class AuthSession
             new Claim(ClaimTypes.Email, user.Email),
             new Claim(ClaimTypes.Name, $"{user.FirstName} {user.LastName}".Trim()),
             new Claim(ClaimTypes.Role, user.Role),
+            new Claim(PasswordClaim, PasswordFingerprint(user)),
         ], CookieAuthenticationDefaults.AuthenticationScheme);
         var settings = ctx.RequestServices.GetRequiredService<ISettingsService>();
         var clock = ctx.RequestServices.GetRequiredService<TimeProvider>();

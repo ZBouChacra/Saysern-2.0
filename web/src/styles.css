@@ -63,3 +63,5 @@ label.check { display: flex; align-items: center; gap: .4rem; font-weight: 500; 
 .banner-preview { display: block; width: 100%; max-height: 120px; object-fit: cover; border-radius: 10px; margin-bottom: .4rem; }
 .file-btn { cursor: pointer; } .chat-media { display: block; max-width: min(280px, 100%); max-height: 260px; border-radius: 10px; }
 .bubble .caption { margin-top: .3rem; } .pending { opacity: .8; font-style: italic; }
+
+.notice { background: #fff6dd; color: #5a4300; border-bottom: 1px solid #ecd9a0; padding: .6rem 1rem; text-align: center; } @media (prefers-color-scheme: dark) { .notice { background: #3b3216; color: #f1deaa; border-color: #5a4a1d; } }

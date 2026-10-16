@@ -11,6 +11,7 @@ using Sayserne.Api;
 using Sayserne.Api.Auth;
 using Sayserne.Api.Data;
 using Sayserne.Api.Endpoints;
+using Sayserne.Api.Email;
 using Sayserne.Api.Infrastructure;
 using Sayserne.Api.Jobs;
 using Sayserne.Api.Media;
@@ -49,7 +50,16 @@ namespace Sayserne.Api
             builder.Services.AddSingleton<IPlatformRepository, PlatformRepository>();
             builder.Services.AddSingleton<ITwoFactorRepository, TwoFactorRepository>();
             // runtime settings: loaded at startup, refreshed after admin edits and periodically (other instances)
-            builder.Services.AddSingleton<ISettingsService>(sp => new SettingsService(sp.GetRequiredService<IStoredProcedureExecutor>(), sp.GetService<SettingOverrides>()));
+            builder.Services.AddSingleton<ISecretProtector, SecretProtector>();
+            builder.Services.AddSingleton<ISettingsService>(sp => new SettingsService(sp.GetRequiredService<IStoredProcedureExecutor>(), sp.GetService<SettingOverrides>(), sp.GetRequiredService<ISecretProtector>()));
+            builder.Services.AddSingleton<IEmailRepository, EmailRepository>();
+            builder.Services.AddSingleton<IEmailRenderer, EmailRenderer>();
+            builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
+            builder.Services.AddSingleton<INotifier, Notifier>();
+            builder.Services.AddSingleton<AccountEmails>();
+            builder.Services.AddSingleton<MarketplaceNotifier>();
+            builder.Services.AddSingleton<IJobHandler, EmailSendJobHandler>();
+            builder.Services.AddSingleton<IJobHandler, MessageNotificationJobHandler>();
             builder.Services.AddHostedService<SettingsRefresher>();
 
             // files, media processing and background jobs
@@ -99,7 +109,8 @@ namespace Sayserne.Api
                         var id = AuthSession.CurrentUserId(c.Principal!);
                         var users = c.HttpContext.RequestServices.GetRequiredService<IUserRepository>();
                         var user = id is null ? null : await users.GetByIdAsync(id.Value);
-                        if (user is null || user.IsLocked || user.Role != c.Principal!.FindFirstValue(ClaimTypes.Role))
+                        if (user is null || user.IsLocked || user.Role != c.Principal!.FindFirstValue(ClaimTypes.Role)
+                            || AuthSession.PasswordFingerprint(user) != c.Principal!.FindFirstValue(AuthSession.PasswordClaim))
                         {
                             c.RejectPrincipal();
                             await c.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
@@ -158,6 +169,7 @@ namespace Sayserne.Api
             app.MapAdminAuth();
             app.MapAdmin();
             app.MapAdminPlatform();
+            app.MapAccountEmail();
             app.MapMarketplace();
             app.MapPublicConfig();
             app.MapFiles();

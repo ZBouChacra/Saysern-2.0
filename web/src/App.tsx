@@ -1,11 +1,16 @@
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { useEffect, useState, type ReactNode } from "react";
-import { api } from "./api";
+import { api, errorMessage } from "./api";
+import { useConfig } from "./config";
 import { useAuth } from "./auth";
 import Alerts from "./pages/Alerts";
 import Appointments from "./pages/Appointments";
 import Book from "./pages/Book";
 import Chats from "./pages/Chats";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
+import Settings from "./pages/Settings";
+import VerifyEmail from "./pages/VerifyEmail";
 import MyProfile from "./pages/MyProfile";
 import Professional from "./pages/Professional";
 import Search from "./pages/Search";
@@ -35,6 +40,7 @@ function Header() {
             <Link to="/chats">Chats{unread > 0 && <span className="badge">{unread}</span>}</Link>
             <Link to="/alerts">Alerts</Link>
             <Link to="/me">Profile</Link>
+            <Link to="/settings">Settings</Link>
             <span className="who">{user.firstName}</span>
             <button className="link" onClick={() => void signOut()}>Sign out</button>
           </>
@@ -57,15 +63,33 @@ function RequireUser({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/** Shown to a signed-in user whose address is not confirmed yet, but only while the site actually requires it (email on + the setting on). */
+function VerifyBanner() {
+  const { user } = useAuth();
+  const cfg = useConfig();
+  const [message, setMessage] = useState<string | null>(null);
+  if (!user || user.emailVerified || !cfg.bool("Email.VerificationRequired")) return null;
+  async function resend() {
+    try { const r = await api.resendVerification(); setMessage(r.alreadyVerified ? "Your address is already confirmed." : "We sent you a new link. Please check your inbox."); }
+    catch (e) { setMessage(errorMessage(e)); }
+  }
+  return <div className="notice" role="status">Please confirm your email address to book appointments or send messages. <button className="link" onClick={() => void resend()}>Send me a new link</button>{message && <span> — {message}</span>}</div>;
+}
+
 export default function App() {
   return (
     <>
       <Header />
+      <VerifyBanner />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/link-google" element={<LinkGoogle />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/settings" element={<RequireUser><Settings /></RequireUser>} />
         <Route path="/search" element={<Search />} />
         <Route path="/professional/:id" element={<Professional />} />
         <Route path="/book/:id" element={<RequireUser><Book /></RequireUser>} />

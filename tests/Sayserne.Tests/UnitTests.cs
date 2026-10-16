@@ -21,6 +21,7 @@ public sealed class FixedSettings(Dictionary<string, string>? values = null) : I
     public int GetInt(string key) => int.Parse(Get(key));
     public bool GetBool(string key) => Get(key) == "true";
     public string GetString(string key) => Get(key);
+    public string GetSecret(string key) => Get(key);
     public Task RefreshAsync(CancellationToken ct = default) => Task.CompletedTask;
     public IReadOnlyDictionary<string, object> PublicValues() => new Dictionary<string, object>();
     private string Get(string key) => values?.GetValueOrDefault(key) ?? _v[key];

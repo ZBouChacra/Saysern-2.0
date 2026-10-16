@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Sayserne.Api.Auth;
 using Sayserne.Api.Data;
+using Sayserne.Api.Email;
 using Sayserne.Api.Infrastructure;
 using Sayserne.Api.Platform;
 
@@ -104,24 +105,29 @@ public static class MarketplaceEndpoints
     {
         var g = app.MapGroup("/api/appointments").RequireAuthorization().RequireRateLimiting(WriteLimiter);
 
-        g.MapPost("", async (HttpContext ctx, BookingInput input, IBookingRepository bookings, ISettingsService settings) =>
+        g.MapPost("", async (HttpContext ctx, BookingInput input, IBookingRepository bookings, ISettingsService settings, MarketplaceNotifier notify) =>
         {
             var (start, duration, description) = MarketplaceValidation.ValidateBooking(input, settings);
             var created = await bookings.CreateAppointmentAsync(ctx.UserId(), input.ProfessionalId!.Value, input.ProfessionId, start, duration, description);
+            await notify.BookingRequested(created);
             return Results.Json(created, statusCode: StatusCodes.Status201Created);
         });
 
         g.MapGet("", async (HttpContext ctx, IBookingRepository bookings) => Results.Ok(await bookings.ListAppointmentsAsync(ctx.UserId())));
 
-        g.MapPost("/{id:long}/status", async (HttpContext ctx, long id, StatusInput input, IBookingRepository bookings) =>
-            Results.Ok(await bookings.TransitionAsync(ctx.UserId(), id, (input.Status ?? "").Trim().ToLowerInvariant())));
+        g.MapPost("/{id:long}/status", async (HttpContext ctx, long id, StatusInput input, IBookingRepository bookings, MarketplaceNotifier notify) =>
+        {
+            var changed = await bookings.TransitionAsync(ctx.UserId(), id, (input.Status ?? "").Trim().ToLowerInvariant());
+            await notify.BookingChanged(changed, ctx.UserId());
+            return Results.Ok(changed);
+        });
 
         var r = app.MapGroup("/api/reviews").RequireAuthorization().RequireRateLimiting(WriteLimiter);
 
         r.MapGet("/eligible", async (HttpContext ctx, IBookingRepository bookings, long professionalId) =>
             Results.Ok(await bookings.EligibleAsync(ctx.UserId(), professionalId)));
 
-        r.MapPost("", async (HttpContext ctx, ReviewInput input, IBookingRepository bookings, ISettingsService settings) =>
+        r.MapPost("", async (HttpContext ctx, ReviewInput input, IBookingRepository bookings, ISettingsService settings, MarketplaceNotifier notify, IUserRepository users) =>
         {
             var errors = new Dictionary<string, string>();
             if (input.AppointmentId is null or <= 0) errors["appointmentId"] = "Required.";
@@ -131,6 +137,8 @@ public static class MarketplaceEndpoints
             if (comment?.Length > maxComment) errors["comment"] = $"At most {maxComment} characters.";
             if (errors.Count > 0) throw new AppException("VALIDATION_FAILED", 400, fieldErrors: errors);
             var created = await bookings.CreateReviewAsync(ctx.UserId(), input.AppointmentId!.Value, input.Rating!.Value, string.IsNullOrEmpty(comment) ? null : comment);
+            var reviewer = await users.GetByIdAsync(ctx.UserId());
+            await notify.ReviewReceived(created, reviewer is null ? "" : $"{reviewer.FirstName} {reviewer.LastName}".Trim());
             return Results.Json(created, statusCode: StatusCodes.Status201Created);
         });
     }
@@ -151,10 +159,13 @@ public static class MarketplaceEndpoints
         g.MapGet("/rooms/{roomId:long}/messages", async (HttpContext ctx, long roomId, IMessagingRepository chat, int? limit, int? offset) =>
             Results.Ok(await chat.MessagesAsync(ctx.UserId(), roomId, limit ?? 50, offset ?? 0)));
 
-        g.MapPost("/rooms/{roomId:long}/messages", async (HttpContext ctx, long roomId, SendMessageInput input, IMessagingRepository chat, ISettingsService settings) =>
+        g.MapPost("/rooms/{roomId:long}/messages", async (HttpContext ctx, long roomId, SendMessageInput input, IMessagingRepository chat, ISettingsService settings, MarketplaceNotifier notify, IUserRepository users) =>
         {
             var (type, content, lat, lng, fileId) = MarketplaceValidation.ValidateMessage(input, settings);
-            return Results.Json(await chat.SendAsync(ctx.UserId(), roomId, type, content, lat, lng, fileId), statusCode: StatusCodes.Status201Created);
+            var sent = await chat.SendAsync(ctx.UserId(), roomId, type, content, lat, lng, fileId);
+            var sender = await users.GetByIdAsync(ctx.UserId());
+            await notify.MessageSent(sent, sender is null ? "" : $"{sender.FirstName} {sender.LastName}".Trim());
+            return Results.Json(sent, statusCode: StatusCodes.Status201Created);
         });
 
         g.MapGet("/unread-count", async (HttpContext ctx, IMessagingRepository chat) => Results.Ok(new { unread = await chat.UnreadAsync(ctx.UserId()) }));

@@ -52,13 +52,13 @@ public sealed class PlatformRepository(IStoredProcedureExecutor db) : IPlatformR
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    public Task<IReadOnlyList<SettingRow>> SettingsAsync(CancellationToken ct = default) => db.QueryAsync("sp_settings_list", null, PlatformMappers.Setting, ct);
+    public Task<IReadOnlyList<SettingRow>> SettingsAsync(CancellationToken ct = default) => db.QueryAsync("sp_settings_list", null, r => PlatformMappers.Setting(r), ct);
 
     public async Task<SettingRow> SetSettingAsync(long actorId, string key, string value, CancellationToken ct = default) =>
-        (await db.QuerySingleOrDefaultAsync("sp_settings_set", new ProcParams().Add("p_actor_id", actorId).Add("p_key", key).Add("p_value", value), PlatformMappers.Setting, ct))!;
+        (await db.QuerySingleOrDefaultAsync("sp_settings_set", new ProcParams().Add("p_actor_id", actorId).Add("p_key", key).Add("p_value", value), r => PlatformMappers.Setting(r), ct))!;
 
     public async Task<SettingRow> ResetSettingAsync(long actorId, string key, CancellationToken ct = default) =>
-        (await db.QuerySingleOrDefaultAsync("sp_settings_reset", new ProcParams().Add("p_actor_id", actorId).Add("p_key", key), PlatformMappers.Setting, ct))!;
+        (await db.QuerySingleOrDefaultAsync("sp_settings_reset", new ProcParams().Add("p_actor_id", actorId).Add("p_key", key), r => PlatformMappers.Setting(r), ct))!;
 
     public Task<IReadOnlyList<LookupType>> LookupTypesAsync(CancellationToken ct = default) => db.QueryAsync("sp_lookups_types_list", null, PlatformMappers.LookupType, ct);
 

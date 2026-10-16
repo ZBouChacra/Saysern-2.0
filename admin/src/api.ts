@@ -1,7 +1,7 @@
 // Typed client for the back-office API (/api/admin/*). Error texts come from the translations the database serves, not from this file.
 
 export class ApiError extends Error {
-  constructor(public readonly status: number, public readonly code: string, public readonly fieldErrors?: Record<string, string>) {
+  constructor(public readonly status: number, public readonly code: string, public readonly fieldErrors?: Record<string, string>, public readonly detail?: string) {
     super(code);
     this.name = "ApiError";
   }
@@ -17,7 +17,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   if (response.status === 204) return undefined as T;
   const text = await response.text();
   const data = text ? JSON.parse(text) : undefined;
-  if (!response.ok) throw new ApiError(response.status, data?.error ?? (response.status === 429 ? "TooManyRequests" : response.status === 403 ? "FORBIDDEN" : "UNKNOWN"), data?.errors);
+  if (!response.ok) throw new ApiError(response.status, data?.error ?? (response.status === 429 ? "TooManyRequests" : response.status === 403 ? "FORBIDDEN" : "UNKNOWN"), data?.errors, data?.detail);
   return data as T;
 }
 
@@ -33,7 +33,7 @@ export interface UserDto { id: number; email: string; emailVerified: boolean; fi
 export interface Session { user: UserDto; isSuper: boolean; permissions: string[]; recoveryCodesRemaining: number; idleMinutes: number }
 export interface AdminUser extends UserDto { roleNames?: string; hasTwoFactor: boolean }
 export interface Paged<T> { items: T[]; total: number; page: number; pageSize: number }
-export interface Setting { key: string; group: string; type: "int" | "decimal" | "bool" | "string"; value: string; default: string; min?: number; max?: number; description: string; isPublic: boolean; updatedAt: string }
+export interface Setting { key: string; group: string; type: "int" | "decimal" | "bool" | "string" | "secret"; isSet?: boolean; value: string; default: string; min?: number; max?: number; description: string; isPublic: boolean; updatedAt: string }
 export interface LookupType { code: string; name: string; description?: string; parentType?: string; isSystem: boolean; valueCount: number }
 export interface LookupValue { id: number; type: string; code: string; parentCode?: string; sortOrder: number; isActive: boolean; metadata?: unknown; names: Record<string, string> }
 export interface TranslationRow { language: string; key: string; value: string; defaultValue: string; updatedAt: string }
@@ -42,6 +42,7 @@ export interface Role { id: number; name: string; description?: string; userCoun
 export interface Category { id: number; name: string; nameAr?: string; description?: string; descriptionAr?: string; icon?: string; isBlocked: boolean }
 export interface Service { id: number; categoryId: number; name: string; nameAr?: string; description?: string; descriptionAr?: string; isBlocked: boolean }
 export interface AuditRow { id: number; occurredAt: string; actorId?: number; actorName?: string; action: string; entityType: string; entityId?: string; summary: string; details?: unknown; ip?: string }
+export interface OutboxRow { id: number; userId?: number; to: string; eventCode: string; language: string; subject: string; status: "queued" | "sent" | "failed" | "skipped"; attempts: number; lastError?: string; createdAt: string; sentAt?: string }
 export interface JobRow { id: number; type: string; payload?: unknown; status: "pending" | "running" | "done" | "failed"; attempts: number; maxAttempts: number; runAt: string; lastError?: string; createdAt: string; finishedAt?: string }
 export interface JobStat { type: string; status: string; count: number }
 export interface AuditFilter { from?: string; to?: string; actorId?: string; action?: string; entityType?: string; search?: string; page?: number; pageSize?: number }
@@ -88,6 +89,8 @@ export const api = {
   saveCategory: (id: number | null, c: Omit<Category, "id">) => id === null ? request<Category>("POST", "/admin/catalog/categories", c) : request<Category>("PUT", `/admin/catalog/categories/${id}`, c),
   saveService: (id: number | null, s: Omit<Service, "id">) => id === null ? request<Service>("POST", "/admin/catalog/services", s) : request<Service>("PUT", `/admin/catalog/services/${id}`, s),
 
+  emailOutbox: (status: string, page: number) => request<Paged<OutboxRow>>("GET", `/admin/email/outbox${q({ status, page, pageSize: 25 })}`),
+  sendTestEmail: (to: string) => request<{ sent: boolean }>("POST", "/admin/email/test", { to }),
   jobs: (status: string, type: string, page: number) => request<Paged<JobRow>>("GET", `/admin/jobs${q({ status, type, page, pageSize: 25 })}`),
   jobStats: () => request<JobStat[]>("GET", "/admin/jobs/stats"),
   retryJob: (id: number) => request<JobRow>("POST", `/admin/jobs/${id}/retry`),

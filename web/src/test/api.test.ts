@@ -188,3 +188,37 @@ describe("file uploads", () => {
     expect(JSON.parse((fn.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ type: "image", fileId: "d".repeat(32), content: "the invoice" });
   });
 });
+
+describe("account email calls", () => {
+  it("posts the verification token in the body, never in the URL", async () => {
+    const fn = mockFetch(200, { verified: true });
+    await api.verifyEmail("tok123");
+    const [url, init] = fn.mock.calls[0] as unknown as [string, RequestInit];
+    expect([url, init.method]).toEqual(["/api/auth/verify-email", "POST"]);
+    expect(JSON.parse(init.body as string)).toEqual({ token: "tok123" });
+  });
+  it("asks for a reset and sets a new password with the token", async () => {
+    const f1 = mockFetch(202, { accepted: true });
+    await api.forgotPassword("me@example.com");
+    expect(JSON.parse((f1.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ email: "me@example.com" });
+    const f2 = mockFetch(200, { reset: true });
+    await api.resetPassword("tok", "New-pass-123");
+    expect((f2.mock.calls[0] as unknown as [string])[0]).toBe("/api/auth/reset-password");
+    expect(JSON.parse((f2.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ token: "tok", password: "New-pass-123" });
+  });
+  it("reads and changes notification choices", async () => {
+    mockFetch(200, [{ event: "booking_requested", channel: "email", enabled: false }]);
+    expect(await api.notificationPrefs()).toEqual([{ event: "booking_requested", channel: "email", enabled: false }]);
+    const fn = mockFetch(200, []);
+    await api.setNotificationPref("new_message", "email", false);
+    const [url, init] = fn.mock.calls[0] as unknown as [string, RequestInit];
+    expect([url, init.method]).toEqual(["/api/me/notifications", "PUT"]);
+    expect(JSON.parse(init.body as string)).toEqual({ event: "new_message", channel: "email", enabled: false });
+  });
+  it("turns an invalid link into a readable message", async () => {
+    mockFetch(400, { error: "INVALID_TOKEN" });
+    const err = await api.verifyEmail("x").catch(e => e);
+    setTexts({ "error.INVALID_TOKEN": "This link is invalid or has expired. Please ask for a new one." });
+    expect(errorMessage(err)).toContain("expired");
+  });
+});

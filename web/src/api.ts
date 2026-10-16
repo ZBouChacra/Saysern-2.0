@@ -126,6 +126,8 @@ export interface ChatRoomSummary {
 }
 export interface ChatMessage { id: number; roomId: number; senderId: number; messageType: "text" | "location" | "image" | "video"; content?: string; latitude?: number; longitude?: number; fileId?: string; isRead: boolean; createdAt: string }
 
+export interface NotificationPref { event: string; channel: string; enabled: boolean }
+
 export type UploadPurpose = "profile_photo" | "banner_photo" | "chat_media";
 export interface UploadResult { id: string; status: "ready" | "processing"; kind: "image" | "video"; url: string; width?: number; height?: number; bytes?: number }
 export interface FileStatus { id: string; status: "processing" | "ready" | "failed"; kind: "image" | "video"; failureCode?: string; url?: string; width?: number; height?: number }
@@ -185,6 +187,12 @@ export const api = {
   setStatus: (id: number, status: "approved" | "cancelled" | "completed") => request<Appointment>("POST", `/appointments/${id}/status`, { status }),
   eligible: (professionalId: number) => request<Eligible[]>("GET", `/reviews/eligible?professionalId=${professionalId}`),
   review: (appointmentId: number, rating: number, comment?: string) => request<{ id: number }>("POST", "/reviews", { appointmentId, rating, comment }),
+  verifyEmail: (token: string) => request<{ verified: boolean }>("POST", "/auth/verify-email", { token }),
+  resendVerification: () => request<{ sent?: boolean; alreadyVerified?: boolean }>("POST", "/auth/resend-verification"),
+  forgotPassword: (email: string) => request<{ accepted: boolean }>("POST", "/auth/forgot-password", { email }),
+  resetPassword: (token: string, password: string) => request<{ reset: boolean }>("POST", "/auth/reset-password", { token, password }),
+  notificationPrefs: () => request<NotificationPref[]>("GET", "/me/notifications"),
+  setNotificationPref: (event: string, channel: string, enabled: boolean) => request<NotificationPref[]>("PUT", "/me/notifications", { event, channel, enabled }),
   uploadFile: upload,
   fileStatus: (id: string) => request<FileStatus>("GET", `/files/${id}/status`),
   rooms: () => request<ChatRoomSummary[]>("GET", "/chat/rooms"),

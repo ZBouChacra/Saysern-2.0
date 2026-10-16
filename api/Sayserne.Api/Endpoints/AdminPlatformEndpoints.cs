@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Sayserne.Api.Auth;
 using Sayserne.Api.Data;
+using Sayserne.Api.Email;
 using Sayserne.Api.Jobs;
 using Sayserne.Api.Platform;
 
@@ -25,9 +26,12 @@ public static class AdminPlatformEndpoints
 
         // ---------------- settings
         g.MapGet("/settings", async (IPlatformRepository platform) => Results.Ok(await platform.SettingsAsync())).RequirePermission("settings.read");
-        g.MapPut("/settings/{key}", async (HttpContext ctx, string key, SettingValueRequest body, IPlatformRepository platform, ISettingsService settings) =>
+        g.MapPut("/settings/{key}", async (HttpContext ctx, string key, SettingValueRequest body, IPlatformRepository platform, ISettingsService settings, ISecretProtector secrets) =>
         {
-            var row = await platform.SetSettingAsync(ctx.UserId(), key, body.Value ?? "");
+            var value = body.Value ?? "";
+            // a secret (e.g. the SMTP password) is encrypted here, so it is never stored, logged or audited in clear
+            if (value.Length > 0 && (await platform.SettingsAsync()).FirstOrDefault(s => s.Key == key)?.Type == "secret") value = secrets.Protect(value);
+            var row = await platform.SetSettingAsync(ctx.UserId(), key, value);
             await settings.RefreshAsync();   // takes effect on this instance immediately, on others within the refresh interval
             return Results.Ok(row);
         }).RequirePermission("settings.manage");

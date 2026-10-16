@@ -26,7 +26,9 @@ public static class ErrorCodes
         "STORAGE_UNAVAILABLE" => 503,
         "FORBIDDEN_ACTION" => 403,
         "INVALID_CREDENTIALS" or "UNAUTHENTICATED" or "INVALID_TWO_FACTOR_CODE" or "TOTP_REPLAY" or "INVALID_RECOVERY_CODE" or "PENDING_EXPIRED" => 401,
-        "ACCOUNT_LOCKED" => 403,
+        "ACCOUNT_LOCKED" or "EMAIL_NOT_VERIFIED" => 403,
+        "TOO_MANY_EMAILS" => 429,
+        "EMAIL_NOT_CONFIGURED" => 409,
         _ => 400,
     };
 }

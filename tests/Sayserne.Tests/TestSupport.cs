@@ -120,6 +120,24 @@ public sealed class TestDatabase
         return Convert.ToDouble(await cmd.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture);
     }
 
+    /// <summary>Test-only: one value from the database, read with the owner account (the app account cannot read tables, by design).</summary>
+    public async Task<string?> ScalarAsync(string sql)
+    {
+        await using var conn = new MySqlConnection(MigratorConnection);
+        await conn.OpenAsync();
+        await using var cmd = new MySqlCommand(sql, conn);
+        var value = await cmd.ExecuteScalarAsync();
+        return value is null or DBNull ? null : Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    public async Task ExecAsync(string sql)
+    {
+        await using var conn = new MySqlConnection(MigratorConnection);
+        await conn.OpenAsync();
+        await using var cmd = new MySqlCommand(sql, conn);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
     private MySqlDataSource? _dataSource;
     private readonly object _dataSourceLock = new();
     /// <summary>One shared connection pool per test database (creating a pool per call exhausts MySQL's connection limit).</summary>

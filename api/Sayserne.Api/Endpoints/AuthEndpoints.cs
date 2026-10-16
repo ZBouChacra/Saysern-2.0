@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
 using Sayserne.Api.Auth;
 using Sayserne.Api.Data;
+using Sayserne.Api.Email;
 using Sayserne.Api.Platform;
 
 namespace Sayserne.Api.Endpoints;
@@ -17,15 +18,16 @@ public static class AuthEndpoints
             return Results.Ok(new { status = "ok" });
         });
 
-        var g = app.MapGroup("/api/auth").RequireRateLimiting("auth");
+        // Only endpoints that take a password or token are rate limited. /me and /providers are called on every page load, so limiting them would lock out ordinary browsing.
+        var g = app.MapGroup("/api/auth");
         g.MapGet("/providers", (IOptions<GoogleOptions> google) => Results.Ok(new { google = google.Value.Enabled, passwordRegistration = true }));
-        g.MapPost("/register", Register);
-        g.MapPost("/login", Login);
+        g.MapPost("/register", Register).RequireRateLimiting("auth");
+        g.MapPost("/login", Login).RequireRateLimiting("auth");
         g.MapPost("/logout", (Delegate)Logout);   // cast: Logout(HttpContext) would otherwise bind as a raw RequestDelegate and drop its result
         g.MapGet("/me", Me).RequireAuthorization();
     }
 
-    private static async Task<IResult> Register(HttpContext ctx, RegisterRequest request, IUserRepository users, IPasswordHasher hasher, ISettingsService settings)
+    private static async Task<IResult> Register(HttpContext ctx, RegisterRequest request, IUserRepository users, IPasswordHasher hasher, ISettingsService settings, AccountEmails mails, ILogger<AccountEmails> log)
     {
         var errors = InputValidation.ValidateRegistration(request, settings);
         if (errors.Count > 0) throw new AppException("VALIDATION_FAILED", 400, fieldErrors: errors);
@@ -34,6 +36,8 @@ public static class AuthEndpoints
             InputValidation.NormalizeEmail(request.Email), hasher.Hash(request.Password!),
             request.FirstName!.Trim(), request.LastName!.Trim());   // DUPLICATE_EMAIL -> 409 via AppException
         await AuthSession.SignInAsync(ctx, user);
+        try { await mails.SendVerificationAsync(user); }   // registration must not fail because e-mail does
+        catch (Exception ex) when (ex is not OperationCanceledException) { log.LogWarning(ex, "Could not send the verification e-mail to user {UserId}.", user.Id); }
         return Results.Json(new { user = user.ToDto() }, statusCode: StatusCodes.Status201Created);
     }
 

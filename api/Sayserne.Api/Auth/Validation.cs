@@ -18,19 +18,25 @@ public static partial class InputValidation
         normalizedEmail.Length is > 0 and <= 254 && EmailPattern().IsMatch(normalizedEmail);
 
     /// <summary>Returns field -> message; empty when the request is valid.</summary>
+    /// <summary>Why a password is not acceptable under the current settings (null = fine). Used by registration and by password reset.</summary>
+    public static string? PasswordProblem(string password, string? email, ISettingsService settings)
+    {
+        var minLength = settings.GetInt("Auth.PasswordMinLength");
+        if (password.Length < minLength) return $"Use at least {minLength} characters.";
+        if (password.Length > 128) return "Use at most 128 characters.";
+        if (settings.GetBool("Auth.PasswordRequireLetter") && !password.Any(char.IsLetter)) return "Include at least one letter.";
+        if (settings.GetBool("Auth.PasswordRequireDigit") && !password.Any(char.IsDigit)) return "Include at least one digit.";
+        if (email is not null && string.Equals(password, email, StringComparison.OrdinalIgnoreCase)) return "The password must not be your email address.";
+        return null;
+    }
+
     public static Dictionary<string, string> ValidateRegistration(RegisterRequest r, ISettingsService settings)
     {
         var errors = new Dictionary<string, string>();
         var email = NormalizeEmail(r.Email);
         if (!IsValidEmail(email)) errors["email"] = "Enter a valid email address.";
 
-        var password = r.Password ?? string.Empty;
-        var minLength = settings.GetInt("Auth.PasswordMinLength");
-        if (password.Length < minLength) errors["password"] = $"Use at least {minLength} characters.";
-        else if (password.Length > 128) errors["password"] = "Use at most 128 characters.";
-        else if (settings.GetBool("Auth.PasswordRequireLetter") && !password.Any(char.IsLetter)) errors["password"] = "Include at least one letter.";
-        else if (settings.GetBool("Auth.PasswordRequireDigit") && !password.Any(char.IsDigit)) errors["password"] = "Include at least one digit.";
-        else if (string.Equals(password, email, StringComparison.OrdinalIgnoreCase)) errors["password"] = "The password must not be your email address.";
+        if (PasswordProblem(r.Password ?? string.Empty, email, settings) is { } problem) errors["password"] = problem;
 
         foreach (var (field, value) in new[] { ("firstName", r.FirstName), ("lastName", r.LastName) })
         {

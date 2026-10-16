@@ -1,4 +1,5 @@
 using System.Text.Json;
+using MySqlConnector;
 using Sayserne.Api.Data;
 using Sayserne.Api.Media;
 using Sayserne.Api.Platform;
@@ -21,6 +22,22 @@ public interface IJobQueue
 
 public sealed class JobQueue(IStoredProcedureExecutor db) : IJobQueue
 {
+    /// <summary>
+    /// Many workers touching the same table can make MySQL abort one transaction as a deadlock victim (error 1213); nothing was changed, so the right
+    /// response is to wait a few milliseconds and run it again. Anything else is a real error and is not retried.
+    /// </summary>
+    private static async Task<T> WithDeadlockRetry<T>(Func<Task<T>> operation)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try { return await operation(); }
+            catch (MySqlException ex) when (ex.ErrorCode == MySqlErrorCode.LockDeadlock && attempt < 6)
+            {
+                await Task.Delay(Random.Shared.Next(10, 40) * attempt);
+            }
+        }
+    }
+
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static JobRow Map(System.Data.Common.DbDataReader r)
     {
@@ -34,13 +51,13 @@ public sealed class JobQueue(IStoredProcedureExecutor db) : IJobQueue
             .Add("p_run_at", runAtUtc).Add("p_dedupe_key", dedupeKey), Map, ct))!;
 
     public Task<IReadOnlyList<JobRow>> ClaimAsync(string worker, int limit, int leaseSeconds, CancellationToken ct = default) =>
-        db.QueryAsync("sp_jobs_claim", new ProcParams().Add("p_worker", worker).Add("p_limit", limit).Add("p_lease_seconds", leaseSeconds), Map, ct);
+        WithDeadlockRetry(() => db.QueryAsync("sp_jobs_claim", new ProcParams().Add("p_worker", worker).Add("p_limit", limit).Add("p_lease_seconds", leaseSeconds), Map, ct));
 
     public Task CompleteAsync(long id, string worker, CancellationToken ct = default) =>
-        db.ExecuteAsync("sp_jobs_complete", new ProcParams().Add("p_id", id).Add("p_worker", worker), ct);
+        WithDeadlockRetry(async () => { await db.ExecuteAsync("sp_jobs_complete", new ProcParams().Add("p_id", id).Add("p_worker", worker), ct); return 0; });
 
     public Task FailAsync(long id, string worker, string error, bool permanent, CancellationToken ct = default) =>
-        db.ExecuteAsync("sp_jobs_fail", new ProcParams().Add("p_id", id).Add("p_worker", worker).Add("p_error", error).Add("p_permanent", permanent), ct);
+        WithDeadlockRetry(async () => { await db.ExecuteAsync("sp_jobs_fail", new ProcParams().Add("p_id", id).Add("p_worker", worker).Add("p_error", error).Add("p_permanent", permanent), ct); return 0; });
 
     public async Task<PagedResult<JobRow>> ListAsync(string? status, string? type, int page, int pageSize, CancellationToken ct = default)
     {

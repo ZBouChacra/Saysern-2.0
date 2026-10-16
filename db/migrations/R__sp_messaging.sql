@@ -18,6 +18,11 @@ CREATE PROCEDURE sp_chat_start(IN p_user_id BIGINT UNSIGNED, IN p_other_id BIGIN
 BEGIN
   DECLARE v_other BIGINT UNSIGNED;
   DECLARE v_id BIGINT UNSIGNED;
+  IF (SELECT value_text FROM app_settings WHERE setting_key = 'Auth.RequireVerifiedEmail') = 'true'
+     AND (SELECT value_text FROM app_settings WHERE setting_key = 'Email.Provider') <> 'off'
+     AND NOT EXISTS (SELECT 1 FROM users WHERE id = p_user_id AND email_verified = 1) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'EMAIL_NOT_VERIFIED';
+  END IF;
   IF p_user_id = p_other_id THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'CANNOT_CHAT_SELF';
   END IF;
@@ -79,6 +84,11 @@ BEGIN
     ROLLBACK;
     RESIGNAL;
   END;
+  IF (SELECT value_text FROM app_settings WHERE setting_key = 'Auth.RequireVerifiedEmail') = 'true'
+     AND (SELECT value_text FROM app_settings WHERE setting_key = 'Email.Provider') <> 'off'
+     AND NOT EXISTS (SELECT 1 FROM users WHERE id = p_user_id AND email_verified = 1) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'EMAIL_NOT_VERIFIED';
+  END IF;
 
   SELECT id INTO v_room FROM chat_rooms WHERE id = p_room_id AND (user_a_id = p_user_id OR user_b_id = p_user_id);
   IF v_room IS NULL THEN

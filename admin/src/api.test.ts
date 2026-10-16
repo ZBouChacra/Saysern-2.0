@@ -76,3 +76,21 @@ describe("background jobs", () => {
     expect([url, init.method]).toEqual(["/api/admin/jobs/9/retry", "POST"]);
   });
 });
+
+describe("email administration", () => {
+  it("keeps the mail server's detail on a failed test so staff can fix the setting", async () => {
+    mockFetch(502, { error: "EMAIL_SEND_FAILED", detail: "The mail server refused the message: 535 authentication failed" });
+    const err = await api.sendTestEmail("a@example.com").catch(e => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.code).toBe("EMAIL_SEND_FAILED");
+    expect(err.detail).toContain("authentication failed");
+  });
+  it("lists the email log with a status filter and sends the test address as JSON", async () => {
+    const list = mockFetch(200, { items: [], total: 0, page: 1, pageSize: 25 });
+    await api.emailOutbox("failed", 2);
+    expect((list.mock.calls[0] as unknown as [string])[0]).toBe("/api/admin/email/outbox?status=failed&page=2&pageSize=25");
+    const test = mockFetch(200, { sent: true });
+    await api.sendTestEmail("x@example.com");
+    expect(JSON.parse((test.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ to: "x@example.com" });
+  });
+});
