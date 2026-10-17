@@ -41,13 +41,12 @@ export default function Users() {
                   <td>{u.role === "admin" && <span className="pill ok">super admin</span>} {u.roleNames}</td>
                   <td>{u.hasTwoFactor ? "on" : "—"}</td>
                   <td>{u.isLocked ? <span className="pill bad">locked</span> : "active"}</td>
-                  <td>{u.isPremium && <span className="pill ok">premium</span>} {u.isStarred && <span className="pill">★</span>}</td>
+                  <td>{u.isPremium && <span className="pill ok" title="Has premium days today (see Premium)">premium</span>} {u.isStarred && <span className="pill">★</span>}</td>
                   <td className="actions">
                     {u.id === session?.user.id ? <span className="muted">you</span> : (
                       <>
                         {can("users.manage") && <button className="btn small secondary" onClick={() => void act(() => api.lockUser(u.id, !u.isLocked), u.isLocked ? "Unlocked." : "Locked.")}>{u.isLocked ? "Unlock" : "Lock"}</button>}
-                        {can("users.manage") && <button className="btn small secondary" onClick={() => void act(() => api.setFlags(u.id, !u.isPremium, u.isStarred))}>{u.isPremium ? "Unpremium" : "Premium"}</button>}
-                        {can("users.manage") && <button className="btn small secondary" onClick={() => void act(() => api.setFlags(u.id, u.isPremium, !u.isStarred))}>{u.isStarred ? "Unstar" : "Star"}</button>}
+                        {can("users.manage") && <button className="btn small secondary" onClick={() => void act(() => api.setFlags(u.id, !u.isStarred))}>{u.isStarred ? "Unstar" : "Star"}</button>}
                         {can("roles.manage") && <button className="btn small secondary" onClick={() => setEditing(u)}>Roles…</button>}
                         {can("admins.manage") && <button className="btn small secondary" onClick={() => void act(() => api.setSuperAdmin(u.id, u.role === "admin" ? "user" : "admin"))}>{u.role === "admin" ? "Remove super admin" : "Make super admin"}</button>}
                         {can("admins.manage") && u.hasTwoFactor && <button className="btn small secondary" onClick={() => { if (window.confirm(`Reset two-factor for ${u.email}? They will enroll again at their next sign-in.`)) void act(() => api.resetTwoFactor(u.id), "Two-factor reset.") }}>Reset 2FA</button>}

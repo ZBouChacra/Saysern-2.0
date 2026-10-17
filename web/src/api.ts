@@ -171,7 +171,9 @@ export const api = {
   categories: () => request<Category[]>("GET", "/catalog/categories"),
   services: (categoryId?: number) => request<Service[]>("GET", `/catalog/services${categoryId ? `?categoryId=${categoryId}` : ""}`),
   topProfessionals: (limit = 6) => request<Listing[]>("GET", `/professionals/top?limit=${limit}`),
-  search: (f: SearchFilters) => request<Paged<Listing>>("GET", `/professionals/search?${toQuery(f)}`),
+  /** The visitor's place only changes the ORDER of the results (their city first, then their country); it is never a filter and never saved with a saved search. */
+  search: (f: SearchFilters, place?: { country?: string; city?: string }) =>
+    request<Paged<Listing>>("GET", `/professionals/search?${toQuery(f)}${place?.country ? `&visitorCountry=${encodeURIComponent(place.country)}` : ""}${place?.country && place.city ? `&visitorCity=${encodeURIComponent(place.city)}` : ""}`),
   professional: (id: number) => request<ProfessionalPage>("GET", `/professionals/${id}`),
   busy: (id: number) => request<BusySlot[]>("GET", `/professionals/${id}/busy`),
   reviews: (id: number) => request<ReviewItem[]>("GET", `/professionals/${id}/reviews`),

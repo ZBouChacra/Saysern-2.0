@@ -23,7 +23,7 @@ BEGIN
   END IF;
 
   SELECT u.id, u.email, u.email_verified, u.password_hash, u.first_name, u.last_name, u.role, u.profile_type,
-         u.is_locked, u.failed_login_attempts, u.locked_until, u.created_at, u.is_premium, u.is_starred,
+         u.is_locked, u.failed_login_attempts, u.locked_until, u.created_at, EXISTS (SELECT 1 FROM premium_days pdx JOIN professions prx ON prx.id = pdx.profession_id WHERE prx.user_id = u.id AND pdx.day = UTC_DATE()) AS is_premium, u.is_starred,
          (SELECT GROUP_CONCAT(r.name ORDER BY r.name SEPARATOR ', ') FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = u.id) AS role_names,
          EXISTS (SELECT 1 FROM user_two_factor t WHERE t.user_id = u.id AND t.confirmed_at IS NOT NULL) AS has_two_factor
   FROM users u
@@ -119,8 +119,8 @@ BEGIN
   CALL sp_users_get_by_id(v_id);
 END$$
 
--- Premium / starred listing flags (affect search ranking).
-CREATE PROCEDURE sp_admin_users_set_flags(IN p_actor_id BIGINT UNSIGNED, IN p_user_id BIGINT UNSIGNED, IN p_is_premium TINYINT(1), IN p_is_starred TINYINT(1))
+-- The starred (featured) flag, which affects search ranking. Premium is not a flag any more: it comes from paid premium batches.
+CREATE PROCEDURE sp_admin_users_set_flags(IN p_actor_id BIGINT UNSIGNED, IN p_user_id BIGINT UNSIGNED, IN p_is_starred TINYINT(1))
 BEGIN
   DECLARE v_email VARCHAR(255);
   DECLARE EXIT HANDLER FOR SQLEXCEPTION
@@ -133,9 +133,9 @@ BEGIN
   IF v_email IS NULL THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'USER_NOT_FOUND';
   END IF;
-  UPDATE users SET is_premium = p_is_premium, is_starred = p_is_starred WHERE id = p_user_id;
-  CALL sp_audit_write(p_actor_id, 'users.flags', 'user', p_user_id, CONCAT('Set flags of ', v_email, ': premium=', p_is_premium, ', starred=', p_is_starred),
-                      JSON_OBJECT('premium', p_is_premium, 'starred', p_is_starred), NULL);
+  UPDATE users SET is_starred = p_is_starred WHERE id = p_user_id;
+  CALL sp_audit_write(p_actor_id, 'users.flags', 'user', p_user_id, CONCAT('Set featured flag of ', v_email, ' to ', p_is_starred),
+                      JSON_OBJECT('starred', p_is_starred), NULL);
   COMMIT;
   CALL sp_users_get_by_id(p_user_id);
 END$$

@@ -15,6 +15,7 @@ using Sayserne.Api.Email;
 using Sayserne.Api.Infrastructure;
 using Sayserne.Api.Ads;
 using Sayserne.Api.Jobs;
+using Sayserne.Api.Premium;
 using Sayserne.Api.Media;
 using Sayserne.Api.Platform;
 using Microsoft.AspNetCore.Authorization;
@@ -61,6 +62,8 @@ namespace Sayserne.Api
             builder.Services.AddSingleton<MarketplaceNotifier>();
             builder.Services.AddSingleton<IJobHandler, EmailSendJobHandler>();
             builder.Services.AddSingleton<IJobHandler, MessageNotificationJobHandler>();
+            builder.Services.AddSingleton<IPremiumRepository, PremiumRepository>();
+            builder.Services.AddSingleton<IJobHandler, PremiumReallocateJobHandler>();
             builder.Services.AddSingleton<IAdRepository, AdRepository>();
             builder.Services.AddSingleton<IJobHandler, AdPurgeJobHandler>();
             builder.Services.AddSingleton<IDigestRepository, DigestRepository>();
@@ -184,6 +187,7 @@ namespace Sayserne.Api
             app.MapAdminPlatform();
             app.MapAccountEmail();
             app.MapAds();
+            app.MapPremium();
             app.MapMarketplace();
             app.MapPublicConfig();
             app.MapFiles();

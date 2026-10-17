@@ -50,6 +50,11 @@ export interface AdPricing { id: number; position: string; countryCode?: string;
 export interface ResolvedPricing { dailyFee: number; maxAds: number }
 export interface AdStat { adId: number; title: string; position: string; impressions: number; uniqueImpressions: number; clicks: number; uniqueClicks: number }
 export interface CapacityDay { day: string; booked: number; maxAds: number }
+export interface PremiumBatch { id: number; professionId?: number; userId?: number; professionalName: string; serviceName: string; countryCode: string; city?: string; dateFrom: string; dateTo: string; entitledDays: number; daysAssigned: number; effectiveTo?: string; feePerDay: number; totalFee: number; status: "pending" | "paid" | "cancelled"; paidAt?: string; createdAt: string; activeToday: boolean }
+export interface PremiumPricing { id: number; countryCode: string; city?: string; dailyFee?: number; maxPremium?: number }
+export interface ResolvedPremiumPricing { dailyFee: number; maxPerCountry: number; maxPerCity?: number }
+export interface PremiumCandidate { professionId: number; userId: number; firstName: string; lastName: string; serviceName: string; country?: string; city?: string; isPremium: boolean }
+export interface PremiumCapacityDay { day: string; used: number; maxPremium: number; cityUsed?: number; maxCity?: number }
 export interface JobRow { id: number; type: string; payload?: unknown; status: "pending" | "running" | "done" | "failed"; attempts: number; maxAttempts: number; runAt: string; lastError?: string; createdAt: string; finishedAt?: string }
 export interface JobStat { type: string; status: string; count: number }
 export interface AuditFilter { from?: string; to?: string; actorId?: string; action?: string; entityType?: string; search?: string; page?: number; pageSize?: number }
@@ -78,7 +83,7 @@ export const api = {
 
   users: (search: string, page: number, pageSize = 20) => request<Paged<AdminUser>>("GET", `/admin/users${q({ search, page, pageSize })}`),
   lockUser: (id: number, isLocked: boolean) => request<{ user: UserDto }>("POST", `/admin/users/${id}/lock`, { isLocked }),
-  setFlags: (id: number, isPremium: boolean, isStarred: boolean) => request<{ user: UserDto }>("POST", `/admin/users/${id}/flags`, { isPremium, isStarred }),
+  setFlags: (id: number, isStarred: boolean) => request<{ user: UserDto }>("POST", `/admin/users/${id}/flags`, { isStarred }),
   setSuperAdmin: (id: number, role: "user" | "admin") => request<{ user: UserDto }>("POST", `/admin/users/${id}/role`, { role }),
   setUserRoles: (id: number, roleIds: number[]) => request<{ roles: { id: number; name: string }[] }>("PUT", `/admin/users/${id}/roles`, { roleIds }),
   resetTwoFactor: (id: number) => request<void>("POST", `/admin/users/${id}/two-factor/reset`),
@@ -119,6 +124,15 @@ export const api = {
   deleteAdPricing: (id: number) => request<void>("DELETE", `/admin/ads/pricing/${id}`),
   resolveAdPricing: (position: string, country?: string, city?: string) => request<ResolvedPricing>("GET", `/admin/ads/pricing/resolve${q({ position, country, city })}`),
   adStats: (from?: string, to?: string) => request<AdStat[]>("GET", `/admin/ads/stats${q({ from, to })}`),
+  premiumBatches: (status?: string) => request<PremiumBatch[]>("GET", `/admin/premium/batches${q({ status })}`),
+  premiumFind: (search: string) => request<PremiumCandidate[]>("GET", `/admin/premium/find${q({ search })}`),
+  createPremiumBatch: (professionId: number, from: string, to: string) => request<PremiumBatch>("POST", "/admin/premium/batches", { professionId, from, to }),
+  setPremiumBatchStatus: (id: number, status: "paid" | "cancelled") => request<PremiumBatch>("POST", `/admin/premium/batches/${id}/status`, { status }),
+  premiumCapacity: (country: string, city: string | undefined, from: string, to: string) => request<PremiumCapacityDay[]>("GET", `/admin/premium/capacity${q({ country, city, from, to })}`),
+  premiumPricing: () => request<PremiumPricing[]>("GET", "/admin/premium/pricing"),
+  savePremiumPricing: (b: { countryCode: string; city?: string; dailyFee?: number; maxPremium?: number }) => request<PremiumPricing>("PUT", "/admin/premium/pricing", b),
+  deletePremiumPricing: (id: number) => request<void>("DELETE", `/admin/premium/pricing/${id}`),
+  resolvePremiumPricing: (country: string, city?: string) => request<ResolvedPremiumPricing>("GET", `/admin/premium/pricing/resolve${q({ country, city })}`),
   emailOutbox: (status: string, page: number) => request<Paged<OutboxRow>>("GET", `/admin/email/outbox${q({ status, page, pageSize: 25 })}`),
   sendTestEmail: (to: string) => request<{ sent: boolean }>("POST", "/admin/email/test", { to }),
   jobs: (status: string, type: string, page: number) => request<Paged<JobRow>>("GET", `/admin/jobs${q({ status, type, page, pageSize: 25 })}`),

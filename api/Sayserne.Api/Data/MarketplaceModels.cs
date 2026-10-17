@@ -38,7 +38,8 @@ public sealed record SearchFilters(
     long? CategoryId = null, long? ServiceId = null, string? FirstName = null, string? LastName = null, string? Sex = null,
     int? MinAge = null, int? MaxAge = null, string? Nationality = null, string? Country = null, string? City = null,
     bool? HasOffice = null, decimal? MinStars = null, decimal? MinCost = null, decimal? MaxCost = null,
-    int? MinExperience = null, int? MaxExperience = null, bool? HasTeam = null, int? Page = null, int? PageSize = null);
+    int? MinExperience = null, int? MaxExperience = null, bool? HasTeam = null, int? Page = null, int? PageSize = null,
+    string? VisitorCountry = null, string? VisitorCity = null);   // where the visitor is: it only affects the ORDER of results (own city, then own country, then elsewhere), never what is found
 
 // ---- bookings ----
 public sealed record BusySlot(DateTime StartsAt, DateTime EndsAt);

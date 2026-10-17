@@ -134,3 +134,33 @@ describe("ads administration", () => {
     expect([(del.mock.calls[0] as unknown as [string])[0], ((del.mock.calls[0] as unknown as [string, RequestInit])[1]).method]).toEqual(["/api/admin/ads/pricing/9", "DELETE"]);
   });
 });
+
+describe("premium administration", () => {
+  it("books days and moves a batch with the right addresses and bodies", async () => {
+    const book = mockFetch(201, { id: 4 });
+    await api.createPremiumBatch(12, "2026-12-01", "2026-12-05");
+    expect([(book.mock.calls[0] as unknown as [string])[0], JSON.parse((book.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)]).toEqual(["/api/admin/premium/batches", { professionId: 12, from: "2026-12-01", to: "2026-12-05" }]);
+    const pay = mockFetch(200, { id: 4 });
+    await api.setPremiumBatchStatus(4, "paid");
+    expect([(pay.mock.calls[0] as unknown as [string])[0], JSON.parse((pay.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)]).toEqual(["/api/admin/premium/batches/4/status", { status: "paid" }]);
+  });
+  it("finds listings, previews capacity and manages prices and limits", async () => {
+    const find = mockFetch(200, []);
+    await api.premiumFind("Nadia & Co");
+    expect((find.mock.calls[0] as unknown as [string])[0]).toBe("/api/admin/premium/find?search=Nadia+%26+Co");
+    const cap = mockFetch(200, []);
+    await api.premiumCapacity("LB", "Beirut", "2026-12-01", "2026-12-05");
+    expect((cap.mock.calls[0] as unknown as [string])[0]).toBe("/api/admin/premium/capacity?country=LB&city=Beirut&from=2026-12-01&to=2026-12-05");
+    const save = mockFetch(200, { id: 1 });
+    await api.savePremiumPricing({ countryCode: "LB", maxPremium: 3 });
+    expect([(save.mock.calls[0] as unknown as [string])[0], ((save.mock.calls[0] as unknown as [string, RequestInit])[1]).method]).toEqual(["/api/admin/premium/pricing", "PUT"]);
+    const del = mockFetch(204);
+    await api.deletePremiumPricing(7);
+    expect((del.mock.calls[0] as unknown as [string])[0]).toBe("/api/admin/premium/pricing/7");
+  });
+  it("sets only the featured flag: premium is not a flag any more", async () => {
+    const fn = mockFetch(200, { user: { id: 3 } });
+    await api.setFlags(3, true);
+    expect(JSON.parse((fn.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ isStarred: true });
+  });
+});

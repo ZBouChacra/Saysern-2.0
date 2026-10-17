@@ -29,7 +29,7 @@ public static class AdminEndpoints
         }).RequirePermission("users.manage");
 
         g.MapPost("/users/{id:long}/flags", async (HttpContext ctx, long id, FlagsInput body, IAdminUserRepository admin) =>
-            Results.Ok(new { user = (await admin.SetFlagsAsync(ctx.UserId(), id, body.IsPremium, body.IsStarred)).ToDto() })).RequirePermission("users.manage");
+            Results.Ok(new { user = (await admin.SetFlagsAsync(ctx.UserId(), id, body.IsStarred)).ToDto() })).RequirePermission("users.manage");
 
         // the super-admin flag and two-factor resets are for super admins only (permission admins.manage)
         g.MapPost("/users/{id:long}/role", async (HttpContext ctx, long id, SetRoleRequest body, IAdminUserRepository admin) =>

@@ -244,3 +244,17 @@ describe("ads", () => {
     await Promise.resolve();   // the rejected promise is swallowed (an unhandled rejection would fail the run)
   });
 });
+
+describe("search with the visitor's place", () => {
+  it("adds the place only for ordering and only when a country is known", async () => {
+    const f1 = mockFetch(200, { items: [], total: 0, page: 1, pageSize: 20 });
+    await api.search({}, { country: "LB", city: "Beirut" });
+    expect((f1.mock.calls[0] as unknown as [string])[0]).toContain("visitorCountry=LB&visitorCity=Beirut");
+    const f2 = mockFetch(200, { items: [], total: 0, page: 1, pageSize: 20 });
+    await api.search({ city: "Jbeil" }, { city: "Beirut" });               // a city without a country means nothing: it is not sent
+    expect((f2.mock.calls[0] as unknown as [string])[0]).not.toContain("visitor");
+    const f3 = mockFetch(200, { items: [], total: 0, page: 1, pageSize: 20 });
+    await api.search({});
+    expect((f3.mock.calls[0] as unknown as [string])[0]).toBe("/api/professionals/search?");
+  });
+});

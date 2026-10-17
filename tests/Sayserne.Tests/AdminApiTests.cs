@@ -152,14 +152,15 @@ public class AdminFlagsApiTests
     {
         await using var host = await ApiHost.StartAsync();
         var (user, _, id) = await host.RegisterAsync();
-        Assert.Equal(HttpStatusCode.Unauthorized, (await host.NewClient().PostAsync($"/api/admin/users/{id}/flags", new { isPremium = true, isStarred = true })).Status);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await user.PostAsync($"/api/admin/users/{id}/flags", new { isPremium = true, isStarred = true })).Status);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await host.NewClient().PostAsync($"/api/admin/users/{id}/flags", new { isStarred = true })).Status);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await user.PostAsync($"/api/admin/users/{id}/flags", new { isStarred = true })).Status);
         var (reader, _, _) = await host.CreateStaffAsync("users.read");
-        Assert.Equal(HttpStatusCode.Forbidden, (await reader.PostAsync($"/api/admin/users/{id}/flags", new { isPremium = true, isStarred = true })).Status);
+        Assert.Equal(HttpStatusCode.Forbidden, (await reader.PostAsync($"/api/admin/users/{id}/flags", new { isStarred = true })).Status);
         var (manager, _, _) = await host.CreateStaffAsync("users.manage");
-        var (status, body) = await manager.PostAsync($"/api/admin/users/{id}/flags", new { isPremium = true, isStarred = false });
+        var (status, body) = await manager.PostAsync($"/api/admin/users/{id}/flags", new { isStarred = true });
         Assert.Equal(HttpStatusCode.OK, status);
-        Assert.True(body.GetProperty("user").GetProperty("isPremium").GetBoolean());
-        Assert.Equal(HttpStatusCode.NotFound, (await manager.PostAsync("/api/admin/users/99999999/flags", new { isPremium = true, isStarred = true })).Status);
+        Assert.True(body.GetProperty("user").GetProperty("isStarred").GetBoolean());
+        Assert.False(body.GetProperty("user").GetProperty("isPremium").GetBoolean());   // premium is not a flag: only a paid premium batch makes a listing premium
+        Assert.Equal(HttpStatusCode.NotFound, (await manager.PostAsync("/api/admin/users/99999999/flags", new { isStarred = true })).Status);
     }
 }

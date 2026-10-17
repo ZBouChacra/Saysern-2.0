@@ -340,6 +340,18 @@ public sealed class ApiHost : IAsyncDisposable
         return created.GetProperty("id").GetInt64();
     }
 
+    /// <summary>Makes a listing premium the proper way: staff book premium days for it and mark them paid. Returns the batch id.</summary>
+    public static async Task<long> MakePremiumAsync(TestClient admin, long professionId, int fromDays = 0, int days = 7)
+    {
+        var from = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(fromDays);
+        var (s1, batch) = await admin.PostAsync("/api/admin/premium/batches", new { professionId, from = from.ToString("yyyy-MM-dd"), to = from.AddDays(days - 1).ToString("yyyy-MM-dd") });
+        Assert.True(s1 == HttpStatusCode.Created, $"premium batch: {s1} {batch}");
+        var id = batch.GetProperty("id").GetInt64();
+        var (s2, paid) = await admin.PostAsync($"/api/admin/premium/batches/{id}/status", new { status = "paid" });
+        Assert.True(s2 == HttpStatusCode.OK, $"premium paid: {s2} {paid}");
+        return id;
+    }
+
     /// <summary>Client books, professional approves, appointment is moved into the past, professional completes it.</summary>
     public async Task<long> CompletedAppointmentAsync(TestClient client, TestClient pro, long proId, long? professionId = null)
     {

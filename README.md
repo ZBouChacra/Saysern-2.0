@@ -16,8 +16,8 @@ Staff    ──▶ admin/ ─/api──┘      │  cookie sessions (separate f
  (password + authenticator)       └─ Google OIDC (public site only)
 ```
 
-> **Status: phases 1, 2 and 3a done; 3b in progress: files, media, background jobs and the e-mail system are built (with their screens). Ads, premium listings, fees and payments are next.** Foundation and authentication (1), the core marketplace (2), and the **configuration platform** (3a): runtime settings, lookups, translated texts, audit log, roles and permissions, two-factor back-office sign-in, user/catalog management — in a separate admin app.
-> Not built yet: ads, premium listings, fees and payments, file storage, e-mail and notifications (3b); contact messages, review and chat moderation, dashboard, About/Contact/legal content (3c); Arabic and right-to-left screens, theme and Settings page, image uploads in the screens, marketing sections, account disabling (4). The mobile app comes after the web application.
+> **Status: phases 1, 2 and 3a done; 3b almost done: files and media, background jobs, e-mail, saved-search digests, advertising and premium listings are built (with their screens). Fees and manual payments with receipts are next.** Foundation and authentication (1), the core marketplace (2), and the **configuration platform** (3a): runtime settings, lookups, translated texts, audit log, roles and permissions, two-factor back-office sign-in, user/catalog management — in a separate admin app.
+> Not built yet: fees and manual payments with receipts (3b); contact messages, review and chat moderation, dashboard, About/Contact/legal content (3c); the full Arabic and right-to-left screens, theme and the user Settings page, per-user time zones, marketing sections, account disabling (4). The mobile app comes after the web application.
 
 ---
 
@@ -331,6 +331,21 @@ Nothing about e-mail is compiled in. In the back office (**Settings -> Email**) 
 * **Visitor's place.** The header has a small location picker (country and city). It is kept in the visitor's browser; when none is chosen and the visitor is signed in, the place on their profile is used. Ads (and later the premium ranking) use it; with no place only worldwide ads are shown.
 * **Known limits:** dates are UTC calendar days; switching a switched-off ad back on does not re-check capacity; rotation is done by the page (`Ads.RotationSeconds`, public setting).
 
+## Premium listings and search ranking (phase 3b, part 4)
+
+**Premium is no longer a flag.** A listing (one profession of a professional) is premium on the days it holds a slot from a **paid** batch. Staff book calendar days under **Premium** in the back office (`premium.manage`); the fee per day is fixed when the batch is created (city price, else country price, else the default in Settings) and the total is days x fee. A batch is `pending` (reserved: not premium), `paid` (premium), or `cancelled` (final). The old manual "premium" switch on users was removed; the *featured* star remains.
+
+**The allocation rules (as confirmed):**
+* Each **country** has a limit of premium listings per day (Premium -> Prices and limits, default in Settings). A batch for any city counts against its country; a city may also have its own extra limit and its own fee. Countries never compete with each other.
+* Batches are served in the order they were **paid**: first paid, first served. A batch that finds a day full does not hold it; it is **pushed later**, skipping full days, so it always receives exactly the days that were paid for (up to `Premium.HorizonDays` past its original end; a batch that cannot be given all its days within that cannot be marked paid).
+* **Lowering a limit** applies at once: the first payers keep their days and later payers lose the contested days and are compensated at the end. Raising it moves them back. Cancelling a batch moves everyone behind it up.
+* **Days already past are never rewritten**: history is frozen; only today and later are recomputed. A daily job re-checks the allocation. One listing never takes two slots on the same day, and the same listing cannot be booked twice for overlapping days.
+* Recalculation is serialised per country (the country's lookup row is the lock, always taken first), with a short retry if MySQL still reports a deadlock.
+
+**Ranking.** Premium first, then featured, then everyone else; **inside each group** the visitor's own city comes first, then the rest of their country, then elsewhere; then rating and experience. The visitor's place (header picker, or their profile) only changes the *order*: it is never a filter and never saved with a saved search. With no known place only rating and experience decide.
+
+**Deployment note.** The migrations avoid stored *functions* on purpose: MySQL refuses to create them for a least-privilege migration account when binary logging is on (the default), so premium status is checked with inline queries inside the procedures.
+
 ## Configuration reference
 
 Deploy-time configuration only — **business rules are runtime settings in the back office** (see above). Values can be environment variables (`Section__Key`), user-secrets, or `appsettings.*.json` — but **secrets only via environment variables or user-secrets**. See `.env.example` for the full list.
@@ -387,7 +402,7 @@ CI (`.github/workflows/ci.yml`) runs both suites against a MySQL 8 service conta
 | 1 | Database foundation, migrations, auth (form + Google), admin users, web shell | **done** |
 | 2 | Catalog, professional profiles/listings, availability, search, booking, reviews, chat, saved searches (+ web pages) | **done** |
 | 3a | Configuration platform: runtime settings, lookups, translated texts, audit log, roles & permissions, two-factor back-office sign-in, **separate admin app**, users, catalog; public web reads everything from the API | **done** |
-| 3b | **Done:** file storage (object storage ⇄ server disk, switchable), image/video processing and their screens, background jobs, **e-mail system** (provider settings, templates, verification, password reset, notifications and preferences). **Still to do:** saved-search digests; **ads** (3 positions, calendar-date batches, daily fees, impressions/clicks); **premium listings** (calendar batches, per-location limits, country-scoped ranking); fees and manual payments with receipts | in progress (digests and the advertising API are done; ad screens, premium listings, fees and payments remain) |
+| 3b | **Done:** file storage (object storage ⇄ server disk, switchable), image/video processing and their screens, background jobs, **e-mail system** (provider settings, templates, verification, password reset, notifications and preferences). saved-search digests, **advertising** and **premium listings** (calendar batches, per-country limits, first-paid-keeps-its-days, visitor-place ranking). **Still to do:** fees and manual payments with printable receipts | in progress (only fees and payments remain) |
 | 3c | Contact messages, review moderation (professional replies, admin soft-delete) and chat monitoring (incl. deleted chats, highlighted admin interventions), dashboard (current year + year filter, CSV export), About / Contact / legal content, branding (logo, name, palettes) | not started |
 | 4 | Arabic + right-to-left screens, theme toggle and Settings page, image/video uploads in the screens, marketing sections, account disabling/re-enabling, per-user time zones and availability enforcement, final parity check, OpenAPI client | not started |
 

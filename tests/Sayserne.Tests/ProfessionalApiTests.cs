@@ -426,16 +426,16 @@ public class SearchApiTests
         await using var host = await ApiHost.StartAsync();
         var tag = "Rk" + Guid.NewGuid().ToString("N")[..8];
         var (admin, _, _) = await host.CreateAdminAsync();
-        var ids = new List<long>();
+        var ids = new List<long>(); var professions = new List<long>();
         for (var i = 0; i < 3; i++)
         {
             var (p, _, id) = await host.RegisterProfessionalAsync($"R{i}", "Rank", tag);
-            await host.AddProfessionAsync(p, extra: new() { ["city"] = tag, ["yearsOfExperience"] = 30 - i });
+            professions.Add(await host.AddProfessionAsync(p, extra: new() { ["city"] = tag, ["country"] = "LB", ["yearsOfExperience"] = 30 - i }));
             ids.Add(id);
         }
-        // ids[2] is premium, ids[1] starred, ids[0] neither (even though it has the most experience)
-        Assert.Equal(HttpStatusCode.OK, (await admin.PostAsync($"/api/admin/users/{ids[2]}/flags", new { isPremium = true, isStarred = false })).Status);
-        Assert.Equal(HttpStatusCode.OK, (await admin.PostAsync($"/api/admin/users/{ids[1]}/flags", new { isPremium = false, isStarred = true })).Status);
+        // ids[2] is premium (paid premium days), ids[1] starred, ids[0] neither (even though it has the most experience)
+        await ApiHost.MakePremiumAsync(admin, professions[2]);
+        Assert.Equal(HttpStatusCode.OK, (await admin.PostAsync($"/api/admin/users/{ids[1]}/flags", new { isStarred = true })).Status);
         var items = (await SearchAsync(host, $"city={tag}")).GetProperty("items");
         Assert.Equal(new[] { ids[2], ids[1], ids[0] }, items.EnumerateArray().Select(x => x.GetProperty("userId").GetInt64()).ToArray());
         Assert.True(items[0].GetProperty("isPremium").GetBoolean());

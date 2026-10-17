@@ -125,7 +125,7 @@ public sealed class ProfessionalRepository(IStoredProcedureExecutor db, Platform
                 .Add("p_sex", f.Sex).Add("p_min_age", f.MinAge).Add("p_max_age", f.MaxAge).Add("p_nationality", f.Nationality).Add("p_country", f.Country)
                 .Add("p_city", f.City).Add("p_has_office", f.HasOffice).Add("p_min_stars", f.MinStars).Add("p_min_cost", f.MinCost).Add("p_max_cost", f.MaxCost)
                 .Add("p_min_experience", f.MinExperience).Add("p_max_experience", f.MaxExperience).Add("p_has_team", f.HasTeam)
-                .Add("p_page", page).Add("p_page_size", size),
+                .Add("p_page", page).Add("p_page_size", size).Add("p_visitor_country", f.VisitorCountry).Add("p_visitor_city", f.VisitorCity),
             MarketplaceMappers.Listing, r => r.Long("total"), ct);
         return new PagedResult<ProfessionalListing>(rows, totals.Count > 0 ? totals[0] : 0, page, size);
     }

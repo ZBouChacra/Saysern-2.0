@@ -17,7 +17,7 @@ public sealed record ReviewInput(long? AppointmentId, int? Rating, string? Comme
 public sealed record StartChatInput(long? UserId);
 public sealed record SendMessageInput(string? Type, string? Content, decimal? Latitude, decimal? Longitude, string? FileId = null);
 public sealed record AlertInput(string? Name, SearchFilters? SearchCriteria, string? Frequency);
-public sealed record FlagsInput(bool IsPremium, bool IsStarred);
+public sealed record FlagsInput(bool IsStarred);   // premium is not a flag: it comes from paid premium batches
 
 /// <summary>Server-side validation. Every method either returns clean values or throws VALIDATION_FAILED with per-field messages.</summary>
 public static partial class MarketplaceValidation
@@ -140,7 +140,7 @@ public static partial class MarketplaceValidation
         var maxPage = settings.GetInt("Search.MaxPageSize");
         if (f.PageSize is < 1 || f.PageSize > maxPage) e.Add("pageSize", $"Between 1 and {maxPage}.");
         var clean = f with { FirstName = S(f.FirstName, "firstName"), LastName = S(f.LastName, "lastName"), Sex = sex, Nationality = S(f.Nationality, "nationality"),
-            Country = S(f.Country, "country"), City = S(f.City, "city") };
+            Country = S(f.Country, "country"), City = S(f.City, "city"), VisitorCountry = S(f.VisitorCountry, "visitorCountry"), VisitorCity = S(f.VisitorCity, "visitorCity") };
         e.ThrowIfAny();
         return clean;
     }
@@ -191,7 +191,7 @@ public static partial class MarketplaceValidation
         // the frequency must exist in the "alert_frequency" lookup (checked by the database)
         if (i.SearchCriteria is null) e.Add("searchCriteria", "Required.");
         e.ThrowIfAny();
-        var criteria = ValidateSearch(i.SearchCriteria! with { Page = null, PageSize = null }, settings);
+        var criteria = ValidateSearch(i.SearchCriteria! with { Page = null, PageSize = null, VisitorCountry = null, VisitorCity = null }, settings);   // a saved search is about what to find, not where the visitor was
         return (name!, criteria, frequency);
     }
 }

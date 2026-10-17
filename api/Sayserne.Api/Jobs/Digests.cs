@@ -41,6 +41,7 @@ public sealed class DigestScheduler(IDigestRepository digests, IJobQueue jobs, T
         var queued = 0;
         var now = clock.GetUtcNow();
         await jobs.EnqueueAsync(Ads.AdPurgeJobHandler.JobType, null, dedupeKey: $"ads.purge:{now:yyyy-MM-dd}", ct: ct);   // once a day, however often this runs
+        await jobs.EnqueueAsync(Premium.PremiumReallocateJobHandler.JobType, null, dedupeKey: $"premium.reallocate:{now:yyyy-MM-dd}", ct: ct);
         foreach (var due in await digests.DueAsync(500, ct))
         {
             var period = now.ToUnixTimeSeconds() / (due.Days * 86400L);

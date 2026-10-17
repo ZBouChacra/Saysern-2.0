@@ -11,7 +11,7 @@ SELECT
   p.geographic_areas, p.avg_rating, p.total_reviews, p.is_hidden, p.is_locked,
   u.first_name, u.last_name, u.profile_photo, u.sex, u.nationality,
   TIMESTAMPDIFF(YEAR, u.date_of_birth, UTC_DATE()) AS age,
-  u.is_premium, u.is_starred, u.is_locked AS user_locked, u.profile_type
+  EXISTS (SELECT 1 FROM premium_days pdx WHERE pdx.profession_id = p.id AND pdx.day = UTC_DATE()) AS is_premium, u.is_starred, u.is_locked AS user_locked, u.profile_type
 FROM professions p
 JOIN users u      ON u.id = p.user_id
 JOIN categories c ON c.id = p.category_id

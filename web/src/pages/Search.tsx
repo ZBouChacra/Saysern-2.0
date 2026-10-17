@@ -5,11 +5,13 @@ import { LookupSelect } from "../components";
 import { useLookup } from "../config";
 import { api, errorMessage, fromQuery, toQuery, type Category, type Listing, type Paged, type SearchFilters, type Service } from "../api";
 import { useAuth } from "../auth";
+import { usePlace } from "../place";
 import { ListingCard } from "../components";
 
 export default function Search() {
   const frequencies = useLookup("alert_frequency");
   const { user } = useAuth();
+  const place = usePlace();
   const [params, setParams] = useSearchParams();
   const filters = useMemo(() => fromQuery(params), [params]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -24,8 +26,8 @@ export default function Search() {
   useEffect(() => { setDraft(filters); }, [filters]);
   useEffect(() => {
     setResult(null);
-    api.search(filters).then(r => { setResult(r); setError(null); }).catch(e => setError(errorMessage(e)));
-  }, [filters]);
+    api.search(filters, { country: place.country, city: place.city }).then(r => { setResult(r); setError(null); }).catch(e => setError(errorMessage(e)));
+  }, [filters, place.country, place.city]);
 
   const num = (v: string) => (v === "" ? undefined : Number(v));
   const set = (patch: Partial<SearchFilters>) => setDraft(d => ({ ...d, ...patch }));

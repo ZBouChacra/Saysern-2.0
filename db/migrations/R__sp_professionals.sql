@@ -21,7 +21,7 @@ DELIMITER $$
 CREATE PROCEDURE sp_profile_get_private(IN p_user_id BIGINT UNSIGNED)
 BEGIN
   SELECT id, email, email_verified, first_name, last_name, phone, sex, date_of_birth, nationality, country, city,
-         profile_photo, banner_photo, bio, portfolio, preferred_language, profile_type, role, is_premium, is_starred
+         profile_photo, banner_photo, bio, portfolio, preferred_language, profile_type, role, EXISTS (SELECT 1 FROM premium_days pdx JOIN professions prx ON prx.id = pdx.profession_id WHERE prx.user_id = users.id AND pdx.day = UTC_DATE()) AS is_premium, is_starred
   FROM users WHERE id = p_user_id;
 END$$
 
@@ -29,7 +29,7 @@ END$$
 CREATE PROCEDURE sp_profile_get_public(IN p_user_id BIGINT UNSIGNED)
 BEGIN
   SELECT id, first_name, last_name, sex, nationality, country, city, profile_photo, banner_photo, bio, portfolio,
-         TIMESTAMPDIFF(YEAR, date_of_birth, UTC_DATE()) AS age, is_premium, is_starred
+         TIMESTAMPDIFF(YEAR, date_of_birth, UTC_DATE()) AS age, EXISTS (SELECT 1 FROM premium_days pdx JOIN professions prx ON prx.id = pdx.profession_id WHERE prx.user_id = users.id AND pdx.day = UTC_DATE()) AS is_premium, is_starred
   FROM users
   WHERE id = p_user_id AND profile_type = 'professional' AND is_locked = 0;
 END$$
@@ -232,7 +232,7 @@ CREATE PROCEDURE sp_professionals_search(
   IN p_sex VARCHAR(10), IN p_min_age INT, IN p_max_age INT, IN p_nationality VARCHAR(100), IN p_country VARCHAR(100),
   IN p_city VARCHAR(100), IN p_has_office TINYINT(1), IN p_min_stars DECIMAL(3,2), IN p_min_cost DECIMAL(10,2),
   IN p_max_cost DECIMAL(10,2), IN p_min_experience INT, IN p_max_experience INT, IN p_has_team TINYINT(1),
-  IN p_page INT, IN p_page_size INT)
+  IN p_page INT, IN p_page_size INT, IN p_visitor_country VARCHAR(100), IN p_visitor_city VARCHAR(100))
 BEGIN
   DECLARE v_size INT;
   DECLARE v_offset INT;
@@ -272,7 +272,13 @@ BEGIN
     AND (p_min_experience IS NULL OR l.years_of_experience >= p_min_experience)
     AND (p_max_experience IS NULL OR l.years_of_experience <= p_max_experience)
     AND (p_has_team IS NULL OR l.has_team = p_has_team)
-  ORDER BY l.is_premium DESC, l.is_starred DESC, l.avg_rating DESC, l.years_of_experience DESC, l.profession_id ASC
+  -- Ranking: premium first, then featured, then everyone else. Inside each group the visitor's own city comes first, then the rest of their
+  -- country, then elsewhere; after that rating and experience. (With no known visitor place everyone counts as "elsewhere" and rating decides.)
+  ORDER BY l.is_premium DESC, l.is_starred DESC,
+           CASE WHEN p_visitor_country IS NULL OR l.country IS NULL OR l.country <> p_visitor_country THEN 2
+                WHEN p_visitor_city IS NOT NULL AND l.city IS NOT NULL AND LOWER(l.city) = LOWER(p_visitor_city) THEN 0
+                ELSE 1 END ASC,
+           l.avg_rating DESC, l.years_of_experience DESC, l.profession_id ASC
   LIMIT v_size OFFSET v_offset;
 
   SELECT COUNT(*) AS total

@@ -458,7 +458,7 @@ public class AuditApiTests
 
         await admin.PostAsync($"/api/admin/users/{userId}/lock", new { isLocked = true });
         await admin.PostAsync($"/api/admin/users/{userId}/lock", new { isLocked = false });
-        await admin.PostAsync($"/api/admin/users/{userId}/flags", new { isPremium = true, isStarred = false });
+        await admin.PostAsync($"/api/admin/users/{userId}/flags", new { isStarred = true });
         await admin.PutAsync($"/api/admin/users/{userId}/roles", new { roleIds = new[] { role.GetProperty("id").GetInt64() } });
         await admin.PutAsync($"/api/admin/lookups/sex/values/male", new { names = new Dictionary<string, string> { ["en"] = "Male" } });
         await admin.PostAsync("/api/admin/catalog/categories", new { name = "Audit cat" });
