@@ -228,13 +228,18 @@ BEGIN
   CALL sp_audit_write(p_actor_id, 'ads.batch.create', 'ad_batch', v_id, CONCAT('Reserved ad #', p_ad_id, ' from ', p_from, ' to ', p_to, ' (', v_days, ' days at ', v_fee, ')'),
                       JSON_OBJECT('adId', p_ad_id, 'from', p_from, 'to', p_to, 'feePerDay', v_fee, 'total', v_fee * v_days), NULL);
   COMMIT;
-  SELECT id, ad_id, date_from, date_to, fee_per_day, total_fee, status, created_at, paid_at FROM ad_batches WHERE id = v_id;
+  SELECT id, ad_id, date_from, date_to, fee_per_day, total_fee, status, created_at, paid_at, (SELECT p.id FROM payments p WHERE p.ad_batch_id = ad_batches.id AND p.status = 'issued' LIMIT 1) AS receipt_id, (SELECT p.receipt_number FROM payments p WHERE p.ad_batch_id = ad_batches.id AND p.status = 'issued' LIMIT 1) AS receipt_number FROM ad_batches WHERE id = v_id;
 END$$
 
 -- pending -> paid, or pending/paid -> cancelled (cancelling frees the capacity). Anything else is refused.
-CREATE PROCEDURE sp_ad_batches_set_status(IN p_actor_id BIGINT UNSIGNED, IN p_id BIGINT UNSIGNED, IN p_status VARCHAR(10))
+CREATE PROCEDURE sp_ad_batches_set_status(IN p_actor_id BIGINT UNSIGNED, IN p_id BIGINT UNSIGNED, IN p_status VARCHAR(10),
+  IN p_billed_to VARCHAR(200), IN p_billed_details VARCHAR(500), IN p_method VARCHAR(30), IN p_reference VARCHAR(100), IN p_received_on DATE, IN p_notes VARCHAR(500))
 BEGIN
   DECLARE v_current VARCHAR(10);
+  DECLARE v_desc VARCHAR(400);
+  DECLARE v_qty INT;
+  DECLARE v_unit DECIMAL(10,2);
+  DECLARE v_sub DECIMAL(12,2);
   DECLARE EXIT HANDLER FOR SQLEXCEPTION
   BEGIN
     ROLLBACK;
@@ -252,14 +257,22 @@ BEGIN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'INVALID_TRANSITION';
   END IF;
   UPDATE ad_batches SET status = p_status, paid_at = IF(p_status = 'paid', UTC_TIMESTAMP(3), paid_at) WHERE id = p_id;
+  IF p_status = 'paid' THEN        -- a batch becomes paid only together with its receipt (same transaction)
+    SELECT CONCAT('Advertisement "', a.title, '" (', IFNULL((SELECT t.name FROM lookup_values v JOIN lookup_translations t ON t.value_id = v.id AND t.language = 'en' WHERE v.type_code = 'ad_position' AND v.code = a.position), a.position),
+                  '), ', b.date_from, ' to ', b.date_to), DATEDIFF(b.date_to, b.date_from) + 1, b.fee_per_day, b.total_fee
+      INTO v_desc, v_qty, v_unit, v_sub FROM ad_batches b JOIN ads a ON a.id = b.ad_id WHERE b.id = p_id;
+    CALL sp_payment_issue(p_actor_id, 'ad', p_id, NULL, v_desc, v_qty, v_unit, v_sub, p_billed_to, p_billed_details, p_method, p_reference, p_received_on, p_notes);
+  ELSEIF v_current = 'paid' THEN
+    CALL sp_payment_void(p_actor_id, p_id, NULL);
+  END IF;
   CALL sp_audit_write(p_actor_id, CONCAT('ads.batch.', p_status), 'ad_batch', p_id, CONCAT('Marked ad batch #', p_id, ' ', p_status), JSON_OBJECT('from', v_current, 'to', p_status), NULL);
   COMMIT;
-  SELECT id, ad_id, date_from, date_to, fee_per_day, total_fee, status, created_at, paid_at FROM ad_batches WHERE id = p_id;
+  SELECT id, ad_id, date_from, date_to, fee_per_day, total_fee, status, created_at, paid_at, (SELECT p.id FROM payments p WHERE p.ad_batch_id = ad_batches.id AND p.status = 'issued' LIMIT 1) AS receipt_id, (SELECT p.receipt_number FROM payments p WHERE p.ad_batch_id = ad_batches.id AND p.status = 'issued' LIMIT 1) AS receipt_number FROM ad_batches WHERE id = p_id;
 END$$
 
 CREATE PROCEDURE sp_ad_batches_list(IN p_ad_id BIGINT UNSIGNED, IN p_status VARCHAR(10))
 BEGIN
-  SELECT id, ad_id, date_from, date_to, fee_per_day, total_fee, status, created_at, paid_at FROM ad_batches
+  SELECT id, ad_id, date_from, date_to, fee_per_day, total_fee, status, created_at, paid_at, (SELECT p.id FROM payments p WHERE p.ad_batch_id = ad_batches.id AND p.status = 'issued' LIMIT 1) AS receipt_id, (SELECT p.receipt_number FROM payments p WHERE p.ad_batch_id = ad_batches.id AND p.status = 'issued' LIMIT 1) AS receipt_number FROM ad_batches
   WHERE (p_ad_id IS NULL OR ad_id = p_ad_id) AND (p_status IS NULL OR status = p_status) ORDER BY date_from DESC, id DESC LIMIT 500;
 END$$
 

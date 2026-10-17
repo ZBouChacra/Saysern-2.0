@@ -7,7 +7,7 @@ namespace Sayserne.Api.Endpoints;
 public static class PremiumEndpoints
 {
     public sealed record BatchInput(long? ProfessionId, DateOnly? From, DateOnly? To);
-    public sealed record BatchStatusInput(string? Status);
+    public sealed record BatchStatusInput(string? Status, string? BilledTo, string? BilledDetails, string? Method, string? Reference, DateOnly? ReceivedOn, string? Notes);
     public sealed record PricingInput(string? CountryCode, string? City, decimal? DailyFee, int? MaxPremium);
 
     private static AppException Invalid(string field, string message) => new("VALIDATION_FAILED", 400, fieldErrors: new Dictionary<string, string> { [field] = message });
@@ -34,7 +34,11 @@ public static class PremiumEndpoints
             return Results.Json(await premium.CreateBatchAsync(ctx.UserId(), b.ProfessionId.Value, b.From.Value, b.To.Value), statusCode: StatusCodes.Status201Created);
         }).RequirePermission("premium.manage");
         g.MapPost("/batches/{id:long}/status", async (HttpContext ctx, long id, BatchStatusInput b, IPremiumRepository premium) =>
-            Results.Ok(await premium.SetBatchStatusAsync(ctx.UserId(), id, (b.Status ?? "").Trim().ToLowerInvariant()))).RequirePermission("premium.manage");
+        {
+            var status = (b.Status ?? "").Trim().ToLowerInvariant();
+            var billing = status == "paid" ? PaymentEndpoints.RequireBilling(b.BilledTo, b.BilledDetails, b.Method, b.Reference, b.ReceivedOn, b.Notes) : null;
+            return Results.Ok(await premium.SetBatchStatusAsync(ctx.UserId(), id, status, billing));
+        }).RequirePermission("premium.manage");
 
         g.MapPut("/pricing", async (HttpContext ctx, PricingInput b, IPremiumRepository premium) =>
         {

@@ -16,8 +16,8 @@ Staff    ──▶ admin/ ─/api──┘      │  cookie sessions (separate f
  (password + authenticator)       └─ Google OIDC (public site only)
 ```
 
-> **Status: phases 1, 2 and 3a done; 3b almost done: files and media, background jobs, e-mail, saved-search digests, advertising and premium listings are built (with their screens). Fees and manual payments with receipts are next.** Foundation and authentication (1), the core marketplace (2), and the **configuration platform** (3a): runtime settings, lookups, translated texts, audit log, roles and permissions, two-factor back-office sign-in, user/catalog management — in a separate admin app.
-> Not built yet: fees and manual payments with receipts (3b); contact messages, review and chat moderation, dashboard, About/Contact/legal content (3c); the full Arabic and right-to-left screens, theme and the user Settings page, per-user time zones, marketing sections, account disabling (4). The mobile app comes after the web application.
+> **Status: phases 1, 2, 3a and 3b done**: files and media, background jobs, e-mail, saved-search digests, advertising, premium listings, and fees with manual payments and printable receipts, all with their screens. Foundation and authentication (1), the core marketplace (2), and the **configuration platform** (3a): runtime settings, lookups, translated texts, audit log, roles and permissions, two-factor back-office sign-in, user/catalog management — in a separate admin app.
+> Not built yet: contact messages, review and chat moderation, dashboard, About/Contact/legal content (3c); the full Arabic and right-to-left screens, theme and the user Settings page, per-user time zones, marketing sections, account disabling (4). The mobile app comes after the web application.
 
 ---
 
@@ -346,6 +346,19 @@ Nothing about e-mail is compiled in. In the back office (**Settings -> Email**) 
 
 **Deployment note.** The migrations avoid stored *functions* on purpose: MySQL refuses to create them for a least-privilege migration account when binary logging is on (the default), so premium status is checked with inline queries inside the procedures.
 
+## Fees, payments and receipts (phase 3b, part 5)
+
+There is no payment gateway yet: staff **record the money they received** and the site issues a numbered receipt. Amounts are in **USD**.
+
+* **Recording a payment is how a booking becomes paid.** In the back office, *Record payment* on an ad batch or a premium batch asks who the receipt is made out to (and an optional address / tax number), how it was paid (a lookup: cash, bank transfer, cheque, card taken outside the site, other), a reference, the date received (not in the future) and notes. One step marks the batch paid **and** issues the receipt, in a single database transaction: if anything fails afterwards (for example a premium booking that cannot be given its days) nothing is recorded and **no receipt number is used**.
+* **Numbers are consecutive and never reused.** They come from a counter that is locked while a receipt is issued, so payments made at the same moment still get consecutive numbers with no duplicates and no gaps (tested with 16 simultaneous payments). The look is a setting: `Billing.ReceiptPrefix` (default `SAY-`) and `Billing.ReceiptDigits` (default 6), for example `SAY-000042`. Changing them affects new receipts only.
+* **A receipt is a snapshot.** It stores the description, days, unit price, VAT rate, VAT and total as they were at payment, plus who paid and how. A later change of price, VAT or setting never alters it. Only *who it is made out to* (name, address, notes) can be corrected afterwards, by staff with `payments.manage`, and every correction is audited (old and new). The amount and the number never change. The printed letterhead (company name, address, tax number, footer) comes from Settings -> Billing.
+* **VAT** is `Billing.VatPercent` (default 0), recorded on each receipt and rounded to the cent.
+* **Cancelling a paid booking voids its receipt**: it is stamped VOID, stays in the list and keeps its number (refunds are handled outside the site). A cancelled booking cannot be paid again, so a booking never has two live receipts.
+* **Screens.** *Payments* lists receipts (search by number, payer, reference or description; filter by kind, status and date received; paging) with the money received in the period, split by kind and method, void receipts excluded. Opening a receipt shows a clean page laid out for printing: use **Print**; the menu and buttons are hidden on paper. Batch tables show each batch's receipt number.
+* **Permissions.** Taking payment needs the booking's own permission (`ads.manage` / `premium.manage`); seeing receipts needs `payments.read`; correcting a name needs `payments.manage`.
+* **Known limits:** one receipt per booking and no partial payments or discounts (change the per-ad fee or the price before booking instead); no refunds or credit notes; receipts are in English; VAT is one rate for everything.
+
 ## Configuration reference
 
 Deploy-time configuration only — **business rules are runtime settings in the back office** (see above). Values can be environment variables (`Section__Key`), user-secrets, or `appsettings.*.json` — but **secrets only via environment variables or user-secrets**. See `.env.example` for the full list.
@@ -402,7 +415,7 @@ CI (`.github/workflows/ci.yml`) runs both suites against a MySQL 8 service conta
 | 1 | Database foundation, migrations, auth (form + Google), admin users, web shell | **done** |
 | 2 | Catalog, professional profiles/listings, availability, search, booking, reviews, chat, saved searches (+ web pages) | **done** |
 | 3a | Configuration platform: runtime settings, lookups, translated texts, audit log, roles & permissions, two-factor back-office sign-in, **separate admin app**, users, catalog; public web reads everything from the API | **done** |
-| 3b | **Done:** file storage (object storage ⇄ server disk, switchable), image/video processing and their screens, background jobs, **e-mail system** (provider settings, templates, verification, password reset, notifications and preferences). saved-search digests, **advertising** and **premium listings** (calendar batches, per-country limits, first-paid-keeps-its-days, visitor-place ranking). **Still to do:** fees and manual payments with printable receipts | in progress (only fees and payments remain) |
+| 3b | **Done:** file storage (object storage ⇄ server disk, switchable), image/video processing and their screens, background jobs, **e-mail system** (provider settings, templates, verification, password reset, notifications and preferences). saved-search digests, **advertising**, **premium listings** (calendar batches, per-country limits, first-paid-keeps-its-days, visitor-place ranking), and **fees and manual payments with printable, consecutively numbered receipts** | done |
 | 3c | Contact messages, review moderation (professional replies, admin soft-delete) and chat monitoring (incl. deleted chats, highlighted admin interventions), dashboard (current year + year filter, CSV export), About / Contact / legal content, branding (logo, name, palettes) | not started |
 | 4 | Arabic + right-to-left screens, theme toggle and Settings page, image/video uploads in the screens, marketing sections, account disabling/re-enabling, per-user time zones and availability enforcement, final parity check, OpenAPI client | not started |
 

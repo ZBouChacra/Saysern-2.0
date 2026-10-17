@@ -28,7 +28,7 @@ public class AdTests
         {
             var (s, b) = await Book(ad, from, to); Assert.Equal(HttpStatusCode.Created, s);
             var id = b.GetProperty("id").GetInt64();
-            Assert.Equal(HttpStatusCode.OK, (await Admin.PostAsync($"/api/admin/ads/batches/{id}/status", new { status = "paid" })).Item1);
+            Assert.Equal(HttpStatusCode.OK, (await Admin.PostAsync($"/api/admin/ads/batches/{id}/status", new { status = "paid", billedTo = "Test customer", method = "cash" })).Item1);
             return id;
         }
         public async Task Setting(string key, string value) => Assert.Equal(HttpStatusCode.OK, (await Admin.PutAsync($"/api/admin/settings/{key}", new { value })).Status);
@@ -243,11 +243,11 @@ public class AdTests
         await using var s = await StartAsync();
         var ad = await s.NewAd();
         var id = (await s.Book(ad)).Item2.GetProperty("id").GetInt64();
-        async Task<(HttpStatusCode, string?)> Move(long batch, string status) { var (st, b) = await s.Admin.PostAsync($"/api/admin/ads/batches/{batch}/status", new { status }); return (st, TestClient.Error(b)); }
+        async Task<(HttpStatusCode, string?)> Move(long batch, string status) { var (st, b) = await s.Admin.PostAsync($"/api/admin/ads/batches/{batch}/status", new { status, billedTo = "Test customer", method = "cash" }); return (st, TestClient.Error(b)); }
         Assert.Equal((HttpStatusCode.BadRequest, "INVALID_STATUS"), await Move(id, "pending"));
         Assert.Equal((HttpStatusCode.BadRequest, "INVALID_STATUS"), await Move(id, "refunded"));
         Assert.Equal((HttpStatusCode.NotFound, "BATCH_NOT_FOUND"), await Move(999999, "paid"));
-        var (ok, paid) = await s.Admin.PostAsync($"/api/admin/ads/batches/{id}/status", new { status = "paid" });
+        var (ok, paid) = await s.Admin.PostAsync($"/api/admin/ads/batches/{id}/status", new { status = "paid", billedTo = "Test customer", method = "cash" });
         Assert.Equal(HttpStatusCode.OK, ok);
         Assert.NotNull(paid.GetProperty("paidAt").GetString());
         Assert.Equal((HttpStatusCode.Conflict, "INVALID_TRANSITION"), await Move(id, "paid"));            // already paid

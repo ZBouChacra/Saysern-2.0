@@ -1,6 +1,7 @@
 using System.Data.Common;
 using Sayserne.Api.Data;
 using Sayserne.Api.Jobs;
+using Sayserne.Api.Payments;
 using Sayserne.Api.Platform;
 
 namespace Sayserne.Api.Ads;
@@ -8,7 +9,7 @@ namespace Sayserne.Api.Ads;
 public sealed record AdPricing(long Id, string Position, string? CountryCode, string? City, decimal? DailyFee, int? MaxAds);
 public sealed record ResolvedPricing(decimal DailyFee, int MaxAds);
 public sealed record Ad(long Id, string Title, string Position, string ImageFileId, string LinkUrl, string? CountryCode, string? City, bool IsActive, decimal? FeeOverride, DateTime CreatedAt, bool RunningToday);
-public sealed record AdBatch(long Id, long AdId, DateOnly DateFrom, DateOnly DateTo, decimal FeePerDay, decimal TotalFee, string Status, DateTime CreatedAt, DateTime? PaidAt);
+public sealed record AdBatch(long Id, long AdId, DateOnly DateFrom, DateOnly DateTo, decimal FeePerDay, decimal TotalFee, string Status, DateTime CreatedAt, DateTime? PaidAt, long? ReceiptId, string? ReceiptNumber);
 public sealed record ServedAd(long Id, string Title, string Position, string ImageUrl, string ClickUrl);
 public sealed record AdStat(long AdId, string Title, string Position, long Impressions, long UniqueImpressions, long Clicks, long UniqueClicks);
 public sealed record AdDay(DateOnly Day, long Impressions, long UniqueImpressions, long Clicks, long UniqueClicks);
@@ -24,7 +25,7 @@ public interface IAdRepository
     Task<IReadOnlyList<Ad>> AdsAsync(string? position, CancellationToken ct = default);
     Task<IReadOnlyList<CapacityDay>> CapacityAsync(long adId, DateOnly from, DateOnly to, CancellationToken ct = default);
     Task<AdBatch> CreateBatchAsync(long actorId, long adId, DateOnly from, DateOnly to, CancellationToken ct = default);
-    Task<AdBatch> SetBatchStatusAsync(long actorId, long id, string status, CancellationToken ct = default);
+    Task<AdBatch> SetBatchStatusAsync(long actorId, long id, string status, BillingInput? billing = null, CancellationToken ct = default);
     Task<IReadOnlyList<AdBatch>> BatchesAsync(long? adId, string? status, CancellationToken ct = default);
     Task<IReadOnlyList<ServedAd>> ServeAsync(string position, string? country, string? city, int limit, CancellationToken ct = default);
     Task<string> RecordAsync(long adId, string kind, string sessionHash, CancellationToken ct = default);
@@ -43,7 +44,7 @@ public sealed class AdRepository(IStoredProcedureExecutor db) : IAdRepository
     private static AdPricing Pricing(DbDataReader r) => new(r.Long("id"), r.Str("position"), r.StrOrNull("country_code"), r.StrOrNull("city"), r.DecOrNull("daily_fee"), r.IntOrNull("max_ads"));
     private static Ad MapAd(DbDataReader r, bool withRunning) => new(r.Long("id"), r.Str("title"), r.Str("position"), r.Str("image_file_id"), r.Str("link_url"), r.StrOrNull("country_code"), r.StrOrNull("city"),
         r.Bool("is_active"), r.DecOrNull("fee_override"), r.Utc("created_at"), withRunning && r.Bool("running_today"));
-    private static AdBatch Batch(DbDataReader r) => new(r.Long("id"), r.Long("ad_id"), D(r, "date_from"), D(r, "date_to"), M(r, "fee_per_day"), M(r, "total_fee"), r.Str("status"), r.Utc("created_at"), r.UtcOrNull("paid_at"));
+    private static AdBatch Batch(DbDataReader r) => new(r.Long("id"), r.Long("ad_id"), D(r, "date_from"), D(r, "date_to"), M(r, "fee_per_day"), M(r, "total_fee"), r.Str("status"), r.Utc("created_at"), r.UtcOrNull("paid_at"), r.LongOrNull("receipt_id"), r.StrOrNull("receipt_number"));
 
     public Task<IReadOnlyList<AdPricing>> PricingAsync(CancellationToken ct = default) => db.QueryAsync("sp_ad_pricing_list", null, Pricing, ct);
 
@@ -70,8 +71,10 @@ public sealed class AdRepository(IStoredProcedureExecutor db) : IAdRepository
     public async Task<AdBatch> CreateBatchAsync(long actorId, long adId, DateOnly from, DateOnly to, CancellationToken ct = default) =>
         (await db.QuerySingleOrDefaultAsync("sp_ad_batches_create", new ProcParams().Add("p_actor_id", actorId).Add("p_ad_id", adId).Add("p_from", Day(from)).Add("p_to", Day(to)), Batch, ct))!;
 
-    public async Task<AdBatch> SetBatchStatusAsync(long actorId, long id, string status, CancellationToken ct = default) =>
-        (await db.QuerySingleOrDefaultAsync("sp_ad_batches_set_status", new ProcParams().Add("p_actor_id", actorId).Add("p_id", id).Add("p_status", status), Batch, ct))!;
+    public async Task<AdBatch> SetBatchStatusAsync(long actorId, long id, string status, BillingInput? billing = null, CancellationToken ct = default) =>
+        (await db.QuerySingleOrDefaultAsync("sp_ad_batches_set_status", new ProcParams().Add("p_actor_id", actorId).Add("p_id", id).Add("p_status", status)
+            .Add("p_billed_to", billing?.BilledTo).Add("p_billed_details", billing?.BilledDetails).Add("p_method", billing?.Method).Add("p_reference", billing?.Reference)
+            .Add("p_received_on", billing?.ReceivedOn?.ToDateTime(TimeOnly.MinValue)).Add("p_notes", billing?.Notes), Batch, ct))!;
 
     public Task<IReadOnlyList<AdBatch>> BatchesAsync(long? adId, string? status, CancellationToken ct = default) =>
         db.QueryAsync("sp_ad_batches_list", new ProcParams().Add("p_ad_id", adId).Add("p_status", status), Batch, ct);

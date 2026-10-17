@@ -347,7 +347,7 @@ public sealed class ApiHost : IAsyncDisposable
         var (s1, batch) = await admin.PostAsync("/api/admin/premium/batches", new { professionId, from = from.ToString("yyyy-MM-dd"), to = from.AddDays(days - 1).ToString("yyyy-MM-dd") });
         Assert.True(s1 == HttpStatusCode.Created, $"premium batch: {s1} {batch}");
         var id = batch.GetProperty("id").GetInt64();
-        var (s2, paid) = await admin.PostAsync($"/api/admin/premium/batches/{id}/status", new { status = "paid" });
+        var (s2, paid) = await admin.PostAsync($"/api/admin/premium/batches/{id}/status", new { status = "paid", billedTo = "Test customer", method = "cash" });
         Assert.True(s2 == HttpStatusCode.OK, $"premium paid: {s2} {paid}");
         return id;
     }

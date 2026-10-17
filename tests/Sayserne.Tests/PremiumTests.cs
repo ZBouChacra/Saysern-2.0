@@ -27,7 +27,7 @@ public class PremiumTests
         public async Task<(HttpStatusCode, JsonElement)> Book(long listing, int from = 0, int days = 5) =>
             await Admin.PostAsync("/api/admin/premium/batches", new { professionId = listing, from = Day(from), to = Day(from + days - 1) });
         public async Task<long> BookId(long listing, int from = 0, int days = 5) { var (s, b) = await Book(listing, from, days); Assert.True(s == HttpStatusCode.Created, $"{s} {b}"); return b.GetProperty("id").GetInt64(); }
-        public async Task<(HttpStatusCode, JsonElement)> SetStatus(long batch, string status) => await Admin.PostAsync($"/api/admin/premium/batches/{batch}/status", new { status });
+        public async Task<(HttpStatusCode, JsonElement)> SetStatus(long batch, string status) => await Admin.PostAsync($"/api/admin/premium/batches/{batch}/status", new { status, billedTo = "Test customer", method = "cash" });   // paying records a payment (a receipt), so it needs who paid and how
         public async Task<long> Pay(long listing, int from = 0, int days = 5) { var id = await BookId(listing, from, days); var (s, b) = await SetStatus(id, "paid"); Assert.True(s == HttpStatusCode.OK, $"pay: {s} {b}"); return id; }
         public async Task Limit(string country, int? max, string? city = null, decimal? fee = null) =>
             Assert.Equal(HttpStatusCode.OK, (await Admin.PutAsync("/api/admin/premium/pricing", new { countryCode = country, city, maxPremium = max, dailyFee = fee })).Status);

@@ -164,3 +164,33 @@ describe("premium administration", () => {
     expect(JSON.parse((fn.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ isStarred: true });
   });
 });
+
+describe("payments and receipts", () => {
+  it("sends who paid and how together with the paid status, for ads and for premium", async () => {
+    const billing = { billedTo: "Acme Co", method: "bank_transfer", reference: "TT-1", receivedOn: "2026-11-02" };
+    const ad = mockFetch(200, { id: 5 });
+    await api.setAdBatchStatus(5, "paid", billing);
+    expect([(ad.mock.calls[0] as unknown as [string])[0], JSON.parse((ad.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)]).toEqual(["/api/admin/ads/batches/5/status", { status: "paid", ...billing }]);
+    const prem = mockFetch(200, { id: 6 });
+    await api.setPremiumBatchStatus(6, "paid", billing);
+    expect(JSON.parse((prem.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ status: "paid", ...billing });
+    const cancel = mockFetch(200, { id: 6 });
+    await api.setPremiumBatchStatus(6, "cancelled");                       // cancelling needs no billing details
+    expect(JSON.parse((cancel.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ status: "cancelled" });
+  });
+  it("lists receipts with filters and paging, reads one, corrects who it is for and reads the totals", async () => {
+    const list = mockFetch(200, { items: [], total: 0, page: 2, pageSize: 25 });
+    await api.payments({ status: "void", kind: "ad", from: "2026-11-01", to: "2026-11-30", search: "Carol & Sons", page: 2 });
+    expect((list.mock.calls[0] as unknown as [string])[0]).toBe("/api/admin/payments?status=void&kind=ad&from=2026-11-01&to=2026-11-30&search=Carol+%26+Sons&page=2&pageSize=25");
+    const one = mockFetch(200, { id: 3, receiptNumber: "SAY-000003" });
+    expect((await api.receipt(3)).receiptNumber).toBe("SAY-000003");
+    expect((one.mock.calls[0] as unknown as [string])[0]).toBe("/api/admin/payments/3");
+    const fix = mockFetch(200, { id: 3 });
+    await api.updateReceiptBilling(3, { billedTo: "Acme Corp", notes: "fixed" });
+    const [url, init] = fix.mock.calls[0] as unknown as [string, RequestInit];
+    expect([url, init.method, JSON.parse(init.body as string)]).toEqual(["/api/admin/payments/3/billing", "PUT", { billedTo: "Acme Corp", notes: "fixed" }]);
+    const sum = mockFetch(200, { rows: [], voided: 0, total: 0 });
+    await api.paymentSummary("2026-11-01");
+    expect((sum.mock.calls[0] as unknown as [string])[0]).toBe("/api/admin/payments/summary?from=2026-11-01");
+  });
+});

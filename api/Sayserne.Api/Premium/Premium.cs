@@ -2,13 +2,14 @@ using System.Data.Common;
 using System.Text.Json;
 using Sayserne.Api.Data;
 using Sayserne.Api.Jobs;
+using Sayserne.Api.Payments;
 
 namespace Sayserne.Api.Premium;
 
 public sealed record PremiumPricing(long Id, string CountryCode, string? City, decimal? DailyFee, int? MaxPremium);
 public sealed record ResolvedPremiumPricing(decimal DailyFee, int MaxPerCountry, int? MaxPerCity);
 public sealed record PremiumBatch(long Id, long? ProfessionId, long? UserId, string ProfessionalName, string ServiceName, string CountryCode, string? City, DateOnly DateFrom, DateOnly DateTo,
-    int EntitledDays, int DaysAssigned, DateOnly? EffectiveTo, decimal FeePerDay, decimal TotalFee, string Status, DateTime? PaidAt, DateTime CreatedAt, bool ActiveToday);
+    int EntitledDays, int DaysAssigned, DateOnly? EffectiveTo, decimal FeePerDay, decimal TotalFee, string Status, DateTime? PaidAt, DateTime CreatedAt, bool ActiveToday, long? ReceiptId, string? ReceiptNumber);
 public sealed record PremiumCandidate(long ProfessionId, long UserId, string FirstName, string LastName, string ServiceName, string? Country, string? City, bool IsPremium);
 public sealed record PremiumCapacityDay(DateOnly Day, int Used, int MaxPremium, int? CityUsed, int? MaxCity);
 
@@ -20,7 +21,7 @@ public interface IPremiumRepository
     Task<ResolvedPremiumPricing> ResolveAsync(string country, string? city, CancellationToken ct = default);
     Task<IReadOnlyList<PremiumCandidate>> FindAsync(string? search, int limit, CancellationToken ct = default);
     Task<PremiumBatch> CreateBatchAsync(long actorId, long professionId, DateOnly from, DateOnly to, CancellationToken ct = default);
-    Task<PremiumBatch> SetBatchStatusAsync(long actorId, long id, string status, CancellationToken ct = default);
+    Task<PremiumBatch> SetBatchStatusAsync(long actorId, long id, string status, BillingInput? billing = null, CancellationToken ct = default);
     Task<IReadOnlyList<PremiumBatch>> BatchesAsync(string? status, string? country, CancellationToken ct = default);
     Task<IReadOnlyList<PremiumCapacityDay>> CapacityAsync(string country, string? city, DateOnly from, DateOnly to, CancellationToken ct = default);
     Task ReallocateAllAsync(CancellationToken ct = default);
@@ -35,7 +36,7 @@ public sealed class PremiumRepository(IStoredProcedureExecutor db) : IPremiumRep
 
     private static PremiumPricing Pricing(DbDataReader r) => new(r.Long("id"), r.Str("country_code"), r.StrOrNull("city"), r.DecOrNull("daily_fee"), r.IntOrNull("max_premium"));
     private static PremiumBatch Batch(DbDataReader r) => new(r.Long("id"), r.LongOrNull("profession_id"), r.LongOrNull("user_id"), r.Str("professional_name"), r.Str("service_name"), r.Str("country_code"), r.StrOrNull("city"),
-        D(r, "date_from"), D(r, "date_to"), r.Int("entitled_days"), r.Int("days_assigned"), DN(r, "effective_to"), M(r, "fee_per_day"), M(r, "total_fee"), r.Str("status"), r.UtcOrNull("paid_at"), r.Utc("created_at"), r.Bool("active_today"));
+        D(r, "date_from"), D(r, "date_to"), r.Int("entitled_days"), r.Int("days_assigned"), DN(r, "effective_to"), M(r, "fee_per_day"), M(r, "total_fee"), r.Str("status"), r.UtcOrNull("paid_at"), r.Utc("created_at"), r.Bool("active_today"), r.LongOrNull("receipt_id"), r.StrOrNull("receipt_number"));
 
     public Task<IReadOnlyList<PremiumPricing>> PricingAsync(CancellationToken ct = default) => db.QueryAsync("sp_premium_pricing_list", null, Pricing, ct);
 
@@ -55,8 +56,10 @@ public sealed class PremiumRepository(IStoredProcedureExecutor db) : IPremiumRep
     public async Task<PremiumBatch> CreateBatchAsync(long actorId, long professionId, DateOnly from, DateOnly to, CancellationToken ct = default) =>
         (await db.QuerySingleOrDefaultAsync("sp_premium_batches_create", new ProcParams().Add("p_actor_id", actorId).Add("p_profession_id", professionId).Add("p_from", Day(from)).Add("p_to", Day(to)), Batch, ct))!;
 
-    public Task<PremiumBatch> SetBatchStatusAsync(long actorId, long id, string status, CancellationToken ct = default) =>
-        DeadlockRetry.RunAsync(async () => (await db.QuerySingleOrDefaultAsync("sp_premium_batches_set_status", new ProcParams().Add("p_actor_id", actorId).Add("p_id", id).Add("p_status", status), Batch, ct))!);
+    public Task<PremiumBatch> SetBatchStatusAsync(long actorId, long id, string status, BillingInput? billing = null, CancellationToken ct = default) =>
+        DeadlockRetry.RunAsync(async () => (await db.QuerySingleOrDefaultAsync("sp_premium_batches_set_status", new ProcParams().Add("p_actor_id", actorId).Add("p_id", id).Add("p_status", status)
+            .Add("p_billed_to", billing?.BilledTo).Add("p_billed_details", billing?.BilledDetails).Add("p_method", billing?.Method).Add("p_reference", billing?.Reference)
+            .Add("p_received_on", billing?.ReceivedOn?.ToDateTime(TimeOnly.MinValue)).Add("p_notes", billing?.Notes), Batch, ct))!);
 
     public Task<IReadOnlyList<PremiumBatch>> BatchesAsync(string? status, string? country, CancellationToken ct = default) =>
         db.QueryAsync("sp_premium_batches_list", new ProcParams().Add("p_status", status).Add("p_id", (long?)null).Add("p_country", country), Batch, ct);

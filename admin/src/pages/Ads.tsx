@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { api, errorMessage, type Ad, type AdBatch, type AdStat, type CapacityDay, type LookupValue } from "../api";
+import { Link } from "react-router-dom";
 import { useSession } from "../session";
+import PaymentForm from "./PaymentForm";
 
 const label = (v: LookupValue) => v.names.en ?? v.code;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -100,6 +102,7 @@ function Batches({ ad, manage, onClose, onChanged }: { ad: Ad; manage: boolean; 
   const [from, setFrom] = useState(today());
   const [to, setTo] = useState(today());
   const [preview, setPreview] = useState<{ days: CapacityDay[]; fee: number } | null>(null);
+  const [paying, setPaying] = useState<AdBatch | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => { try { setBatches(await api.adBatches(ad.id)); } catch (e) { setError(errorMessage(e)); } }, [ad.id]);
@@ -121,12 +124,15 @@ function Batches({ ad, manage, onClose, onChanged }: { ad: Ad; manage: boolean; 
     <section className="card" aria-label={`Batches of ${ad.title}`}>
       <div className="row spread"><h2>Batches: {ad.title}</h2><button className="btn small secondary" onClick={onClose}>Close</button></div>
       {error && <p className="error" role="alert">{error}</p>}
-      <div className="table-wrap"><table className="t"><thead><tr><th>From</th><th>To</th><th>Days</th><th>Fee per day</th><th>Total (USD)</th><th>Status</th><th /></tr></thead><tbody>
+      <div className="table-wrap"><table className="t"><thead><tr><th>From</th><th>To</th><th>Days</th><th>Fee per day</th><th>Total (USD)</th><th>Status</th><th>Receipt</th><th /></tr></thead><tbody>
         {batches.map(b => (<tr key={b.id}><td>{b.dateFrom}</td><td>{b.dateTo}</td><td>{daysBetween(b.dateFrom, b.dateTo)}</td><td>{b.feePerDay.toFixed(2)}</td><td>{b.totalFee.toFixed(2)}</td>
           <td><span className={`pill ${b.status === "paid" ? "ok" : b.status === "cancelled" ? "bad" : ""}`}>{b.status}</span></td>
-          <td className="row">{manage && b.status === "pending" && <button className="btn small" onClick={() => void move(b, "paid")}>Mark paid</button>}{manage && b.status !== "cancelled" && <button className="btn small secondary" onClick={() => void move(b, "cancelled")}>Cancel</button>}</td></tr>))}
-        {batches.length === 0 && <tr><td colSpan={7} className="muted">No batches yet: this ad will not run.</td></tr>}
+          <td>{b.receiptId ? <Link to={`/payments/${b.receiptId}`}>{b.receiptNumber}</Link> : <span className="muted">—</span>}</td>
+          <td className="row">{manage && b.status === "pending" && <button className="btn small" onClick={() => setPaying(b)}>Record payment</button>}{manage && b.status !== "cancelled" && <button className="btn small secondary" onClick={() => void move(b, "cancelled")}>Cancel</button>}</td></tr>))}
+        {batches.length === 0 && <tr><td colSpan={8} className="muted">No batches yet: this ad will not run.</td></tr>}
       </tbody></table></div>
+      {paying && <PaymentForm title={`${ad.title}, ${paying.dateFrom} to ${paying.dateTo}`} defaultBilledTo={ad.title} amount={paying.totalFee} onCancel={() => setPaying(null)}
+        onSubmit={async billing => { await api.setAdBatchStatus(paying.id, "paid", billing); setPaying(null); await load(); onChanged(); }} />}
       {manage && ad.isActive && (
         <>
           <h3>Reserve days</h3>

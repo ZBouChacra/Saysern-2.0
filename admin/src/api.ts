@@ -45,12 +45,17 @@ export interface AuditRow { id: number; occurredAt: string; actorId?: number; ac
 export interface OutboxRow { id: number; userId?: number; to: string; eventCode: string; language: string; subject: string; status: "queued" | "sent" | "failed" | "skipped"; attempts: number; lastError?: string; createdAt: string; sentAt?: string }
 export interface Ad { id: number; title: string; position: string; imageFileId: string; linkUrl: string; countryCode?: string; city?: string; isActive: boolean; feeOverride?: number; createdAt: string; runningToday: boolean }
 export interface AdInput { title: string; position: string; imageFileId: string; linkUrl: string; countryCode?: string; city?: string; isActive: boolean; feeOverride?: number }
-export interface AdBatch { id: number; adId: number; dateFrom: string; dateTo: string; feePerDay: number; totalFee: number; status: "pending" | "paid" | "cancelled"; createdAt: string; paidAt?: string }
+export interface AdBatch { id: number; adId: number; dateFrom: string; dateTo: string; feePerDay: number; totalFee: number; status: "pending" | "paid" | "cancelled"; createdAt: string; paidAt?: string; receiptId?: number; receiptNumber?: string }
+/** Who paid and how. Marking a batch paid records this and issues a numbered receipt. */
+export interface BillingInput { billedTo: string; billedDetails?: string; method: string; reference?: string; receivedOn?: string; notes?: string }
+export interface PaymentRow { id: number; receiptNumber: string; kind: "ad" | "premium"; description: string; subtotal: number; vatAmount: number; total: number; currency: string; billedTo: string; method: string; reference?: string; receivedOn: string; status: "issued" | "void"; issuedAt: string }
+export interface Receipt { id: number; seq: number; receiptNumber: string; kind: "ad" | "premium"; description: string; quantity: number; unitPrice: number; subtotal: number; vatPercent: number; vatAmount: number; total: number; currency: string; billedTo: string; billedDetails?: string; method: string; methodName?: string; reference?: string; receivedOn: string; notes?: string; status: "issued" | "void"; voidReason?: string; voidedAt?: string; issuedAt: string; companyName: string; companyAddress?: string; companyTaxId?: string; footer?: string }
+export interface PaymentSummary { rows: { kind: string; method: string; receipts: number; subtotal: number; vat: number; total: number }[]; voided: number; total: number }
 export interface AdPricing { id: number; position: string; countryCode?: string; city?: string; dailyFee?: number; maxAds?: number }
 export interface ResolvedPricing { dailyFee: number; maxAds: number }
 export interface AdStat { adId: number; title: string; position: string; impressions: number; uniqueImpressions: number; clicks: number; uniqueClicks: number }
 export interface CapacityDay { day: string; booked: number; maxAds: number }
-export interface PremiumBatch { id: number; professionId?: number; userId?: number; professionalName: string; serviceName: string; countryCode: string; city?: string; dateFrom: string; dateTo: string; entitledDays: number; daysAssigned: number; effectiveTo?: string; feePerDay: number; totalFee: number; status: "pending" | "paid" | "cancelled"; paidAt?: string; createdAt: string; activeToday: boolean }
+export interface PremiumBatch { id: number; professionId?: number; userId?: number; professionalName: string; serviceName: string; countryCode: string; city?: string; dateFrom: string; dateTo: string; entitledDays: number; daysAssigned: number; effectiveTo?: string; feePerDay: number; totalFee: number; status: "pending" | "paid" | "cancelled"; paidAt?: string; createdAt: string; activeToday: boolean; receiptId?: number; receiptNumber?: string }
 export interface PremiumPricing { id: number; countryCode: string; city?: string; dailyFee?: number; maxPremium?: number }
 export interface ResolvedPremiumPricing { dailyFee: number; maxPerCountry: number; maxPerCity?: number }
 export interface PremiumCandidate { professionId: number; userId: number; firstName: string; lastName: string; serviceName: string; country?: string; city?: string; isPremium: boolean }
@@ -117,7 +122,7 @@ export const api = {
   uploadAdImage,
   adBatches: (adId?: number) => request<AdBatch[]>("GET", `/admin/ads/batches${q({ adId })}`),
   createAdBatch: (adId: number, from: string, to: string) => request<AdBatch>("POST", `/admin/ads/${adId}/batches`, { from, to }),
-  setAdBatchStatus: (id: number, status: "paid" | "cancelled") => request<AdBatch>("POST", `/admin/ads/batches/${id}/status`, { status }),
+  setAdBatchStatus: (id: number, status: "paid" | "cancelled", billing?: BillingInput) => request<AdBatch>("POST", `/admin/ads/batches/${id}/status`, { status, ...billing }),
   adCapacity: (adId: number, from: string, to: string) => request<CapacityDay[]>("GET", `/admin/ads/${adId}/capacity${q({ from, to })}`),
   adPricing: () => request<AdPricing[]>("GET", "/admin/ads/pricing"),
   saveAdPricing: (b: { position: string; countryCode?: string; city?: string; dailyFee?: number; maxAds?: number }) => request<AdPricing>("PUT", "/admin/ads/pricing", b),
@@ -127,7 +132,11 @@ export const api = {
   premiumBatches: (status?: string) => request<PremiumBatch[]>("GET", `/admin/premium/batches${q({ status })}`),
   premiumFind: (search: string) => request<PremiumCandidate[]>("GET", `/admin/premium/find${q({ search })}`),
   createPremiumBatch: (professionId: number, from: string, to: string) => request<PremiumBatch>("POST", "/admin/premium/batches", { professionId, from, to }),
-  setPremiumBatchStatus: (id: number, status: "paid" | "cancelled") => request<PremiumBatch>("POST", `/admin/premium/batches/${id}/status`, { status }),
+  setPremiumBatchStatus: (id: number, status: "paid" | "cancelled", billing?: BillingInput) => request<PremiumBatch>("POST", `/admin/premium/batches/${id}/status`, { status, ...billing }),
+  payments: (f: { status?: string; kind?: string; from?: string; to?: string; search?: string; page?: number }) => request<Paged<PaymentRow>>("GET", `/admin/payments${q({ ...f, pageSize: 25 })}`),
+  paymentSummary: (from?: string, to?: string) => request<PaymentSummary>("GET", `/admin/payments/summary${q({ from, to })}`),
+  receipt: (id: number) => request<Receipt>("GET", `/admin/payments/${id}`),
+  updateReceiptBilling: (id: number, b: { billedTo: string; billedDetails?: string; notes?: string }) => request<Receipt>("PUT", `/admin/payments/${id}/billing`, b),
   premiumCapacity: (country: string, city: string | undefined, from: string, to: string) => request<PremiumCapacityDay[]>("GET", `/admin/premium/capacity${q({ country, city, from, to })}`),
   premiumPricing: () => request<PremiumPricing[]>("GET", "/admin/premium/pricing"),
   savePremiumPricing: (b: { countryCode: string; city?: string; dailyFee?: number; maxPremium?: number }) => request<PremiumPricing>("PUT", "/admin/premium/pricing", b),

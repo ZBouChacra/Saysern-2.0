@@ -15,7 +15,7 @@ public static partial class AdEndpoints
 {
     public sealed record AdInput(string? Title, string? Position, string? ImageFileId, string? LinkUrl, string? CountryCode, string? City, bool? IsActive, decimal? FeeOverride);
     public sealed record BatchInput(DateOnly? From, DateOnly? To);
-    public sealed record BatchStatusInput(string? Status);
+    public sealed record BatchStatusInput(string? Status, string? BilledTo, string? BilledDetails, string? Method, string? Reference, DateOnly? ReceivedOn, string? Notes);
     public sealed record PricingInput(string? Position, string? CountryCode, string? City, decimal? DailyFee, int? MaxAds);
 
     public const string EventLimiter = "ads";
@@ -87,7 +87,12 @@ public static partial class AdEndpoints
             return Results.Json(await ads.CreateBatchAsync(ctx.UserId(), id, b.From.Value, b.To.Value), statusCode: StatusCodes.Status201Created);
         }).RequirePermission("ads.manage");
         g.MapPost("/batches/{id:long}/status", async (HttpContext ctx, long id, BatchStatusInput b, IAdRepository ads) =>
-            Results.Ok(await ads.SetBatchStatusAsync(ctx.UserId(), id, (b.Status ?? "").Trim().ToLowerInvariant()))).RequirePermission("ads.manage");
+        {
+            var status = (b.Status ?? "").Trim().ToLowerInvariant();
+            // marking a batch paid records the payment: who it is for, how it was paid, and that becomes the numbered receipt
+            var billing = status == "paid" ? PaymentEndpoints.RequireBilling(b.BilledTo, b.BilledDetails, b.Method, b.Reference, b.ReceivedOn, b.Notes) : null;
+            return Results.Ok(await ads.SetBatchStatusAsync(ctx.UserId(), id, status, billing));
+        }).RequirePermission("ads.manage");
 
         g.MapPut("/pricing", async (HttpContext ctx, PricingInput b, IAdRepository ads) =>
         {

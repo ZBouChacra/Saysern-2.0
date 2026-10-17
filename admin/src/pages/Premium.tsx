@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, errorMessage, type LookupValue, type PremiumBatch, type PremiumCandidate, type PremiumCapacityDay, type PremiumPricing, type ResolvedPremiumPricing } from "../api";
+import { Link } from "react-router-dom";
 import { useSession } from "../session";
+import PaymentForm from "./PaymentForm";
 
 const label = (v: LookupValue) => v.names.en ?? v.code;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -17,6 +19,7 @@ export default function Premium() {
   const [countries, setCountries] = useState<LookupValue[]>([]);
   const [prices, setPrices] = useState<PremiumPricing[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [paying, setPaying] = useState<PremiumBatch | null>(null);
 
   const load = useCallback(async () => {
     try { const [b, c, p] = await Promise.all([api.premiumBatches(), api.lookupValues("country"), api.premiumPricing()]); setBatches(b); setCountries(c.filter(v => v.isActive)); setPrices(p); setError(null); }
@@ -37,17 +40,21 @@ export default function Premium() {
 
       {manage && <Booking countries={countries} onBooked={load} onError={setError} />}
 
+      {paying && <PaymentForm title={`${paying.professionalName}, ${paying.dateFrom} to ${paying.dateTo}`} defaultBilledTo={paying.professionalName} amount={paying.totalFee} onCancel={() => setPaying(null)}
+        onSubmit={async billing => { try { await api.setPremiumBatchStatus(paying.id, "paid", billing); setPaying(null); await load(); } catch (e) { await load(); throw e; } }} />}
+
       <h2>Batches</h2>
-      <div className="table-wrap"><table className="t"><thead><tr><th>Professional</th><th>Place</th><th>Paid days</th><th>Runs</th><th>Fee / day</th><th>Total (USD)</th><th>Status</th><th /></tr></thead><tbody>
+      <div className="table-wrap"><table className="t"><thead><tr><th>Professional</th><th>Place</th><th>Paid days</th><th>Runs</th><th>Fee / day</th><th>Total (USD)</th><th>Status</th><th>Receipt</th><th /></tr></thead><tbody>
         {batches.map(b => (
           <tr key={b.id}><td>{b.professionalName}<div className="muted small">{b.serviceName}</div></td><td>{place(b.countryCode, b.city)}</td>
             <td>{b.entitledDays} ({b.dateFrom} → {b.dateTo})</td>
             <td>{b.status === "paid" ? <>{b.daysAssigned} of {b.entitledDays} days, until {b.effectiveTo ?? "—"}{pushed(b) > 0 && <span className="pill" title="The country limit was reached, so this batch was pushed later"> pushed +{pushed(b)} days</span>} {b.activeToday && <span className="pill ok">premium today</span>}</> : <span className="muted">—</span>}</td>
             <td>{b.feePerDay.toFixed(2)}</td><td>{b.totalFee.toFixed(2)}</td>
             <td><span className={`pill ${b.status === "paid" ? "ok" : b.status === "cancelled" ? "bad" : ""}`}>{b.status}</span></td>
-            <td className="row">{manage && b.status === "pending" && <button className="btn small" onClick={() => void move(b, "paid")}>Mark paid</button>}{manage && b.status !== "cancelled" && <button className="btn small secondary" onClick={() => void move(b, "cancelled")}>Cancel</button>}</td></tr>
+            <td>{b.receiptId ? <Link to={`/payments/${b.receiptId}`}>{b.receiptNumber}</Link> : <span className="muted">—</span>}</td>
+            <td className="row">{manage && b.status === "pending" && <button className="btn small" onClick={() => setPaying(b)}>Record payment</button>}{manage && b.status !== "cancelled" && <button className="btn small secondary" onClick={() => void move(b, "cancelled")}>Cancel</button>}</td></tr>
         ))}
-        {batches.length === 0 && <tr><td colSpan={8} className="muted">No premium batches yet.</td></tr>}
+        {batches.length === 0 && <tr><td colSpan={9} className="muted">No premium batches yet.</td></tr>}
       </tbody></table></div>
 
       <Prices countries={countries} rows={prices} manage={manage} onChanged={load} onError={setError} countryName={countryName} />

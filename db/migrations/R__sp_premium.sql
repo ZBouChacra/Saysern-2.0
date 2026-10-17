@@ -236,9 +236,13 @@ END$$
 
 -- pending -> paid, or pending/paid -> cancelled. Paying recalculates the country at once; if the batch cannot be given all the days it paid for
 -- within the horizon the payment is refused (PREMIUM_NO_CAPACITY). Cancelling frees its days for everyone behind it.
-CREATE PROCEDURE sp_premium_batches_set_status(IN p_actor_id BIGINT UNSIGNED, IN p_id BIGINT UNSIGNED, IN p_status VARCHAR(10))
+CREATE PROCEDURE sp_premium_batches_set_status(IN p_actor_id BIGINT UNSIGNED, IN p_id BIGINT UNSIGNED, IN p_status VARCHAR(10),
+  IN p_billed_to VARCHAR(200), IN p_billed_details VARCHAR(500), IN p_method VARCHAR(30), IN p_reference VARCHAR(100), IN p_received_on DATE, IN p_notes VARCHAR(500))
 BEGIN
   DECLARE v_current VARCHAR(10);
+  DECLARE v_desc VARCHAR(400);
+  DECLARE v_unit DECIMAL(10,2);
+  DECLARE v_sub DECIMAL(12,2);
   DECLARE v_country VARCHAR(100);
   DECLARE v_entitled INT;
   DECLARE v_assigned INT;
@@ -265,6 +269,13 @@ BEGIN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'INVALID_TRANSITION';
   END IF;
   UPDATE premium_batches SET status = p_status, paid_at = IF(p_status = 'paid', UTC_TIMESTAMP(3), paid_at) WHERE id = p_id;
+  IF p_status = 'paid' THEN        -- the receipt is issued in the same transaction: if the days cannot be given below, it is rolled back and no number is used
+    SELECT CONCAT('Premium listing: ', service_name, ' - ', professional_name, IFNULL(CONCAT(', ', city), ''), ' (', country_code, '), ', date_from, ' to ', date_to), fee_per_day, total_fee
+      INTO v_desc, v_unit, v_sub FROM premium_batches WHERE id = p_id;
+    CALL sp_payment_issue(p_actor_id, 'premium', NULL, p_id, v_desc, v_entitled, v_unit, v_sub, p_billed_to, p_billed_details, p_method, p_reference, p_received_on, p_notes);
+  ELSEIF v_current = 'paid' THEN
+    CALL sp_payment_void(p_actor_id, NULL, p_id);
+  END IF;
   CALL sp_premium_reallocate(v_country);
   IF p_status = 'paid' THEN
     SELECT days_assigned, effective_to INTO v_assigned, v_effective FROM premium_batches WHERE id = p_id;
@@ -282,7 +293,9 @@ CREATE PROCEDURE sp_premium_batches_list(IN p_status VARCHAR(10), IN p_id BIGINT
 BEGIN
   SELECT b.id, b.profession_id, b.user_id, b.professional_name, b.service_name, b.country_code, b.city, b.date_from, b.date_to, b.entitled_days, b.days_assigned,
          b.effective_to, b.fee_per_day, b.total_fee, b.status, b.paid_at, b.created_at,
-         EXISTS (SELECT 1 FROM premium_days d WHERE d.batch_id = b.id AND d.day = UTC_DATE()) AS active_today
+         EXISTS (SELECT 1 FROM premium_days d WHERE d.batch_id = b.id AND d.day = UTC_DATE()) AS active_today,
+         (SELECT p.id FROM payments p WHERE p.premium_batch_id = b.id AND p.status = 'issued' LIMIT 1) AS receipt_id,
+         (SELECT p.receipt_number FROM payments p WHERE p.premium_batch_id = b.id AND p.status = 'issued' LIMIT 1) AS receipt_number
   FROM premium_batches b
   WHERE (p_status IS NULL OR b.status = p_status) AND (p_id IS NULL OR b.id = p_id) AND (p_country IS NULL OR b.country_code = p_country)
   ORDER BY b.id DESC LIMIT 500;
