@@ -44,6 +44,7 @@ public interface IBookingRepository
     Task<ReviewCreated> CreateReviewAsync(long reviewerId, long appointmentId, int rating, string? comment, CancellationToken ct = default);
     Task<IReadOnlyList<ReviewItem>> ListReviewsAsync(long professionalId, int limit, int offset, CancellationToken ct = default);
     Task<IReadOnlyList<EligibleAppointment>> EligibleAsync(long clientId, long professionalId, CancellationToken ct = default);
+    Task<ReviewReply> ReplyToReviewAsync(long professionalId, long reviewId, string text, CancellationToken ct = default);
 }
 
 public interface IMessagingRepository
@@ -53,6 +54,8 @@ public interface IMessagingRepository
     Task<IReadOnlyList<ChatMessage>> MessagesAsync(long userId, long roomId, int limit, int offset, CancellationToken ct = default);
     Task<ChatMessage> SendAsync(long userId, long roomId, string type, string? content, decimal? latitude, decimal? longitude, string? fileId = null, CancellationToken ct = default);
     Task<int> UnreadAsync(long userId, CancellationToken ct = default);
+    Task DeleteMessageAsync(long userId, long roomId, long messageId, CancellationToken ct = default);
+    Task DeleteRoomAsync(long userId, long roomId, CancellationToken ct = default);
     Task<Alert> CreateAlertAsync(long userId, string name, SearchFilters criteria, string frequency, CancellationToken ct = default);
     Task<IReadOnlyList<Alert>> AlertsAsync(long userId, CancellationToken ct = default);
     Task<Alert?> GetAlertAsync(long userId, long id, CancellationToken ct = default);
@@ -165,6 +168,13 @@ public sealed class BookingRepository(IStoredProcedureExecutor db) : IBookingRep
 
     public Task<IReadOnlyList<EligibleAppointment>> EligibleAsync(long clientId, long professionalId, CancellationToken ct = default) =>
         db.QueryAsync("sp_reviews_eligible", new ProcParams().Add("p_client_id", clientId).Add("p_professional_id", professionalId), MarketplaceMappers.Eligible, ct);
+
+    public async Task<ReviewReply> ReplyToReviewAsync(long professionalId, long reviewId, string text, CancellationToken ct = default)
+    {
+        var rows = await db.QueryAsync("sp_reviews_reply", new ProcParams().Add("p_professional_id", professionalId).Add("p_review_id", reviewId).Add("p_text", text),
+            r => new ReviewReply(MarketplaceMappers.ReviewItem(r), r.Long("reviewer_id"), r.Bool("first_reply")), ct);
+        return rows[0];
+    }
 }
 
 public sealed class MessagingRepository(IStoredProcedureExecutor db) : IMessagingRepository
@@ -191,6 +201,12 @@ public sealed class MessagingRepository(IStoredProcedureExecutor db) : IMessagin
         var rows = await db.QueryAsync("sp_chat_unread_count", new ProcParams().Add("p_user_id", userId), r => r.Int("unread"), ct);
         return rows.Count > 0 ? rows[0] : 0;
     }
+
+    public Task DeleteMessageAsync(long userId, long roomId, long messageId, CancellationToken ct = default) =>
+        db.ExecuteAsync("sp_chat_message_delete", new ProcParams().Add("p_user_id", userId).Add("p_room_id", roomId).Add("p_message_id", messageId), ct);
+
+    public Task DeleteRoomAsync(long userId, long roomId, CancellationToken ct = default) =>
+        db.ExecuteAsync("sp_chat_room_delete", new ProcParams().Add("p_user_id", userId).Add("p_room_id", roomId), ct);
 
     public async Task<Alert> CreateAlertAsync(long userId, string name, SearchFilters criteria, string frequency, CancellationToken ct = default) =>
         (await db.QuerySingleOrDefaultAsync("sp_alerts_create",

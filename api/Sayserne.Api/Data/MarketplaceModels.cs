@@ -50,7 +50,8 @@ public sealed record Appointment(
     string ProfessionalFirstName, string ProfessionalLastName, string? ProfessionalPhoto, string? ServiceName, string? CategoryName, bool HasReview);
 
 public sealed record ReviewCreated(long Id, long AppointmentId, long ProfessionalId, int Rating, string? Comment, DateTime CreatedAt);
-public sealed record ReviewItem(long Id, int Rating, string? Comment, DateTime CreatedAt, string ReviewerFirstName, string ReviewerLastName, string? ReviewerPhoto);
+public sealed record ReviewItem(long Id, int Rating, string? Comment, DateTime CreatedAt, string ReviewerFirstName, string ReviewerLastName, string? ReviewerPhoto, string? ReplyText = null, DateTime? RepliedAt = null, DateTime? ReplyEditedAt = null);
+public sealed record ReviewReply(ReviewItem Review, long ReviewerId, bool FirstReply);
 public sealed record EligibleAppointment(long Id, DateTime StartsAt);
 
 // ---- messaging ----
@@ -58,7 +59,7 @@ public sealed record ChatRoom(long Id, DateTime LastMessageAt, DateTime CreatedA
 public sealed record ChatRoomSummary(
     long Id, long OtherUserId, string OtherFirstName, string OtherLastName, string? OtherPhoto, DateTime LastMessageAt,
     string? LastMessageType, string? LastMessageContent, long? LastMessageSenderId, int UnreadCount);
-public sealed record ChatMessage(long Id, long RoomId, long SenderId, string MessageType, string? Content, decimal? Latitude, decimal? Longitude, string? FileId, bool IsRead, DateTime CreatedAt);
+public sealed record ChatMessage(long Id, long RoomId, long SenderId, string MessageType, string? Content, decimal? Latitude, decimal? Longitude, string? FileId, bool IsRead, DateTime CreatedAt, bool IsStaff = false, bool IsDeleted = false);
 public sealed record Alert(long Id, string Name, SearchFilters SearchCriteria, string Frequency, DateTime CreatedAt);
 
 internal static class MarketplaceMappers
@@ -108,7 +109,7 @@ internal static class MarketplaceMappers
         r.StrOrNull("service_name"), r.StrOrNull("category_name"), r.Bool("has_review"));
 
     public static ReviewCreated ReviewCreated(DbDataReader r) => new(r.Long("id"), r.Long("appointment_id"), r.Long("professional_id"), r.Int("rating"), r.StrOrNull("comment"), r.Utc("created_at"));
-    public static ReviewItem ReviewItem(DbDataReader r) => new(r.Long("id"), r.Int("rating"), r.StrOrNull("comment"), r.Utc("created_at"), r.Str("reviewer_first_name"), r.Str("reviewer_last_name"), r.StrOrNull("reviewer_photo"));
+    public static ReviewItem ReviewItem(DbDataReader r) => new(r.Long("id"), r.Int("rating"), r.StrOrNull("comment"), r.Utc("created_at"), r.Str("reviewer_first_name"), r.Str("reviewer_last_name"), r.StrOrNull("reviewer_photo"), r.StrOrNull("reply_text"), r.UtcOrNull("replied_at"), r.UtcOrNull("reply_edited_at"));
     public static EligibleAppointment Eligible(DbDataReader r) => new(r.Long("id"), r.Utc("starts_at"));
 
     public static ChatRoom Room(DbDataReader r) => new(r.Long("id"), r.Utc("last_message_at"), r.Utc("created_at"));
@@ -117,7 +118,7 @@ internal static class MarketplaceMappers
         r.StrOrNull("last_message_type"), r.StrOrNull("last_message_content"), r.LongOrNull("last_message_sender_id"), r.Int("unread_count"));
     public static ChatMessage Message(DbDataReader r) => new(
         r.Long("id"), r.Long("room_id"), r.Long("sender_id"), r.Str("message_type"), r.StrOrNull("content"), r.DecOrNull("latitude"), r.DecOrNull("longitude"), r.StrOrNull("file_id"),
-        r.Bool("is_read"), r.Utc("created_at"));
+        r.Bool("is_read"), r.Utc("created_at"), r.Bool("is_staff"), r.Bool("is_deleted"));
 
     public static Alert Alert(DbDataReader r) => new(
         r.Long("id"), r.Str("name"), JsonSerializer.Deserialize<SearchFilters>(r.Str("search_criteria"), Json) ?? new SearchFilters(), r.Str("frequency"), r.Utc("created_at"));

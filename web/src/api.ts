@@ -117,14 +117,14 @@ export interface Appointment {
   description?: string; status: AppointmentStatus; createdAt: string; clientFirstName: string; clientLastName: string;
   professionalFirstName: string; professionalLastName: string; serviceName?: string; categoryName?: string; hasReview: boolean;
 }
-export interface ReviewItem { id: number; rating: number; comment?: string; createdAt: string; reviewerFirstName: string; reviewerLastName: string }
+export interface ReviewItem { id: number; rating: number; comment?: string; createdAt: string; reviewerFirstName: string; reviewerLastName: string; replyText?: string; repliedAt?: string; replyEditedAt?: string }
 export interface Eligible { id: number; startsAt: string }
 
 export interface ChatRoomSummary {
   id: number; otherUserId: number; otherFirstName: string; otherLastName: string; lastMessageAt: string; lastMessageType?: string;
   lastMessageContent?: string; lastMessageSenderId?: number; unreadCount: number;
 }
-export interface ChatMessage { id: number; roomId: number; senderId: number; messageType: "text" | "location" | "image" | "video"; content?: string; latitude?: number; longitude?: number; fileId?: string; isRead: boolean; createdAt: string }
+export interface ChatMessage { id: number; roomId: number; senderId: number; messageType: "text" | "location" | "image" | "video"; content?: string; latitude?: number; longitude?: number; fileId?: string; isRead: boolean; createdAt: string; isStaff?: boolean; isDeleted?: boolean }
 
 export interface ServedAd { id: number; title: string; position: string; imageUrl: string; clickUrl: string }
 export interface NotificationPref { event: string; channel: string; enabled: boolean }
@@ -201,6 +201,9 @@ export const api = {
   adImpression: (id: number): void => { void fetch(`/api/ads/${id}/impression`, { method: "POST", credentials: "same-origin", keepalive: true, headers: { "X-Requested-With": "sayserne-web" } }).catch(() => undefined); },
   uploadFile: upload,
   fileStatus: (id: string) => request<FileStatus>("GET", `/files/${id}/status`),
+  replyToReview: (id: number, text: string) => request<ReviewItem>("PUT", `/reviews/${id}/reply`, { text }),
+  deleteMessage: (roomId: number, messageId: number) => request<void>("DELETE", `/chat/rooms/${roomId}/messages/${messageId}`),
+  deleteRoom: (roomId: number) => request<void>("DELETE", `/chat/rooms/${roomId}`),
   rooms: () => request<ChatRoomSummary[]>("GET", "/chat/rooms"),
   startChat: (userId: number) => request<{ id: number }>("POST", "/chat/rooms", { userId }),
   messages: (roomId: number) => request<ChatMessage[]>("GET", `/chat/rooms/${roomId}/messages?limit=100`),

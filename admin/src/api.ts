@@ -60,6 +60,10 @@ export interface PremiumPricing { id: number; countryCode: string; city?: string
 export interface ResolvedPremiumPricing { dailyFee: number; maxPerCountry: number; maxPerCity?: number }
 export interface PremiumCandidate { professionId: number; userId: number; firstName: string; lastName: string; serviceName: string; country?: string; city?: string; isPremium: boolean }
 export interface PremiumCapacityDay { day: string; used: number; maxPremium: number; cityUsed?: number; maxCity?: number }
+export interface AdminReview { id: number; rating: number; comment?: string; createdAt: string; replyText?: string; repliedAt?: string; isDeleted: boolean; deletedAt?: string; deleteReason?: string; reviewerId: number; reviewerName: string; professionalId: number; professionalName: string; deletedByName?: string }
+export interface AdminChatRoom { id: number; userAId: number; userAName: string; userAEmail: string; userBId: number; userBName: string; userBEmail: string; createdAt: string; lastMessageAt: string; messageCount: number; deletedMessages: number; staffMessages: number; deletedByAAt?: string; deletedByBAt?: string }
+export interface AdminChatMessage { id: number; roomId: number; senderId: number; senderName: string; messageType: string; content?: string; latitude?: number; longitude?: number; fileId?: string; isRead: boolean; isStaff: boolean; createdAt: string; deletedAt?: string; deletedBy?: number; deletedByName?: string }
+export interface AdminChatThread { room: { id: number; userAId: number; userAName: string; userBId: number; userBName: string }; messages: AdminChatMessage[] }
 export interface JobRow { id: number; type: string; payload?: unknown; status: "pending" | "running" | "done" | "failed"; attempts: number; maxAttempts: number; runAt: string; lastError?: string; createdAt: string; finishedAt?: string }
 export interface JobStat { type: string; status: string; count: number }
 export interface AuditFilter { from?: string; to?: string; actorId?: string; action?: string; entityType?: string; search?: string; page?: number; pageSize?: number }
@@ -142,6 +146,12 @@ export const api = {
   savePremiumPricing: (b: { countryCode: string; city?: string; dailyFee?: number; maxPremium?: number }) => request<PremiumPricing>("PUT", "/admin/premium/pricing", b),
   deletePremiumPricing: (id: number) => request<void>("DELETE", `/admin/premium/pricing/${id}`),
   resolvePremiumPricing: (country: string, city?: string) => request<ResolvedPremiumPricing>("GET", `/admin/premium/pricing/resolve${q({ country, city })}`),
+  adminReviews: (status: string, search: string, page: number) => request<Paged<AdminReview>>("GET", `/admin/reviews${q({ status, search, page, pageSize: 25 })}`),
+  hideReview: (id: number, reason: string) => request<AdminReview>("POST", `/admin/reviews/${id}/hide`, { reason }),
+  restoreReview: (id: number) => request<AdminReview>("POST", `/admin/reviews/${id}/restore`),
+  adminChats: (filter: string, search: string, page: number) => request<Paged<AdminChatRoom>>("GET", `/admin/chats${q({ filter, search, page, pageSize: 25 })}`),
+  readChat: (roomId: number) => request<AdminChatThread>("GET", `/admin/chats/${roomId}/messages`),
+  postStaffMessage: (roomId: number, content: string) => request<AdminChatMessage>("POST", `/admin/chats/${roomId}/messages`, { content }),
   emailOutbox: (status: string, page: number) => request<Paged<OutboxRow>>("GET", `/admin/email/outbox${q({ status, page, pageSize: 25 })}`),
   sendTestEmail: (to: string) => request<{ sent: boolean }>("POST", "/admin/email/test", { to }),
   jobs: (status: string, type: string, page: number) => request<Paged<JobRow>>("GET", `/admin/jobs${q({ status, type, page, pageSize: 25 })}`),

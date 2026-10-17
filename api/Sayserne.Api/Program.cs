@@ -15,6 +15,7 @@ using Sayserne.Api.Email;
 using Sayserne.Api.Infrastructure;
 using Sayserne.Api.Ads;
 using Sayserne.Api.Jobs;
+using Sayserne.Api.Moderation;
 using Sayserne.Api.Payments;
 using Sayserne.Api.Premium;
 using Sayserne.Api.Media;
@@ -63,6 +64,7 @@ namespace Sayserne.Api
             builder.Services.AddSingleton<MarketplaceNotifier>();
             builder.Services.AddSingleton<IJobHandler, EmailSendJobHandler>();
             builder.Services.AddSingleton<IJobHandler, MessageNotificationJobHandler>();
+            builder.Services.AddSingleton<IModerationRepository, ModerationRepository>();
             builder.Services.AddSingleton<IPaymentRepository, PaymentRepository>();
             builder.Services.AddSingleton<IPremiumRepository, PremiumRepository>();
             builder.Services.AddSingleton<IJobHandler, PremiumReallocateJobHandler>();
@@ -191,6 +193,7 @@ namespace Sayserne.Api
             app.MapAds();
             app.MapPremium();
             app.MapPayments();
+            app.MapModeration();
             app.MapMarketplace();
             app.MapPublicConfig();
             app.MapFiles();

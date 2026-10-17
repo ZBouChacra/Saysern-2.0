@@ -17,6 +17,7 @@ public sealed record ReviewInput(long? AppointmentId, int? Rating, string? Comme
 public sealed record StartChatInput(long? UserId);
 public sealed record SendMessageInput(string? Type, string? Content, decimal? Latitude, decimal? Longitude, string? FileId = null);
 public sealed record AlertInput(string? Name, SearchFilters? SearchCriteria, string? Frequency);
+public sealed record ReplyInput(string? Text);
 public sealed record FlagsInput(bool IsStarred);   // premium is not a flag: it comes from paid premium batches
 
 /// <summary>Server-side validation. Every method either returns clean values or throws VALIDATION_FAILED with per-field messages.</summary>

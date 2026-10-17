@@ -16,7 +16,7 @@ Staff    ──▶ admin/ ─/api──┘      │  cookie sessions (separate f
  (password + authenticator)       └─ Google OIDC (public site only)
 ```
 
-> **Status: phases 1, 2, 3a and 3b done**: files and media, background jobs, e-mail, saved-search digests, advertising, premium listings, and fees with manual payments and printable receipts, all with their screens. Foundation and authentication (1), the core marketplace (2), and the **configuration platform** (3a): runtime settings, lookups, translated texts, audit log, roles and permissions, two-factor back-office sign-in, user/catalog management — in a separate admin app.
+> **Status: phases 1, 2, 3a and 3b done; 3c started (review answers and moderation, chat deletion and moderation are built)**: files and media, background jobs, e-mail, saved-search digests, advertising, premium listings, and fees with manual payments and printable receipts, all with their screens. Foundation and authentication (1), the core marketplace (2), and the **configuration platform** (3a): runtime settings, lookups, translated texts, audit log, roles and permissions, two-factor back-office sign-in, user/catalog management — in a separate admin app.
 > Not built yet: contact messages, review and chat moderation, dashboard, About/Contact/legal content (3c); the full Arabic and right-to-left screens, theme and the user Settings page, per-user time zones, marketing sections, account disabling (4). The mobile app comes after the web application.
 
 ---
@@ -358,6 +358,14 @@ There is no payment gateway yet: staff **record the money they received** and th
 * **Screens.** *Payments* lists receipts (search by number, payer, reference or description; filter by kind, status and date received; paging) with the money received in the period, split by kind and method, void receipts excluded. Opening a receipt shows a clean page laid out for printing: use **Print**; the menu and buttons are hidden on paper. Batch tables show each batch's receipt number.
 * **Permissions.** Taking payment needs the booking's own permission (`ads.manage` / `premium.manage`); seeing receipts needs `payments.read`; correcting a name needs `payments.manage`.
 * **Known limits:** one receipt per booking and no partial payments or discounts (change the per-ad fee or the price before booking instead); no refunds or credit notes; receipts are in English; VAT is one rate for everything.
+
+## Reviews and conversations: answers, deletion and moderation (phase 3c, part 1)
+
+**Reviews.** New reviews are published at once. The professional a review is about can **answer it** (one answer, editable, at most `Reviews.MaxReplyLength` characters; shown under the review to everyone; the reviewer is e-mailed about the first answer only, not edits). Nobody else can answer, and a professional cannot remove a review. **Staff** (`reviews.manage`) can **hide** a review with a mandatory reason and **restore** it: a hidden review disappears from the site, stops counting towards the professional's rating (recomputed at once) and cannot be answered, but nothing is erased, staff still see it with who hid it and why, and the reviewer cannot write a second review for the same appointment. Every hide and restore is audited.
+
+**Deleting in chat.** A person can **delete their own messages** (for everyone: both people then see only "This message was deleted", never the text; a deleted picture or video can no longer be fetched by either of them) and can **delete a conversation**: it disappears from their list and their history is cleared, **for them only**; the other person keeps theirs. If something newer arrives (or they open the chat again) it comes back showing only what is newer. Staff messages cannot be deleted by users.
+
+**Moderation of conversations** (`chats.read` / `chats.post`). Staff can list every conversation (filter "with deletions", search by name or e-mail), and open one to read it **including deleted messages, who deleted them and when**, plus pictures and videos. **Every reading is recorded in the audit log** (who, which conversation, when). With `chats.post` staff can **write in a conversation as the SaySerné team**: both people see it highlighted, are e-mailed (this notification cannot be switched off), and it brings the conversation back for anyone who had deleted it. Team messages never count as "unread". Everything staff do here is audited in the same database transaction.
 
 ## Configuration reference
 

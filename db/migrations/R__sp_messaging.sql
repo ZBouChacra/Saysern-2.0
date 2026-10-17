@@ -34,6 +34,7 @@ BEGIN
   VALUES (LEAST(p_user_id, p_other_id), GREATEST(p_user_id, p_other_id))
   ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id);
   SET v_id = LAST_INSERT_ID();
+  UPDATE chat_room_users SET deleted_at = NULL WHERE room_id = v_id AND user_id = p_user_id;     -- opening a conversation again brings it back (what was cleared stays cleared)
   SELECT id, last_message_at, created_at FROM chat_rooms WHERE id = v_id;
 END$$
 
@@ -41,13 +42,15 @@ CREATE PROCEDURE sp_chat_rooms_list(IN p_user_id BIGINT UNSIGNED)
 BEGIN
   SELECT r.id, o.id AS other_user_id, o.first_name AS other_first_name, o.last_name AS other_last_name,
          o.profile_photo AS other_photo, r.last_message_at,
-         (SELECT m.message_type FROM chat_messages m WHERE m.room_id = r.id ORDER BY m.id DESC LIMIT 1) AS last_message_type,
-         (SELECT m.content FROM chat_messages m WHERE m.room_id = r.id ORDER BY m.id DESC LIMIT 1) AS last_message_content,
-         (SELECT m.sender_id FROM chat_messages m WHERE m.room_id = r.id ORDER BY m.id DESC LIMIT 1) AS last_message_sender_id,
-         (SELECT COUNT(*) FROM chat_messages m WHERE m.room_id = r.id AND m.sender_id <> p_user_id AND m.is_read = 0) AS unread_count
+         (SELECT IF(m.deleted_at IS NULL, m.message_type, 'deleted') FROM chat_messages m WHERE m.room_id = r.id AND m.id > IFNULL(cu.cleared_up_to, 0) ORDER BY m.id DESC LIMIT 1) AS last_message_type,
+         (SELECT IF(m.deleted_at IS NULL, m.content, NULL) FROM chat_messages m WHERE m.room_id = r.id AND m.id > IFNULL(cu.cleared_up_to, 0) ORDER BY m.id DESC LIMIT 1) AS last_message_content,
+         (SELECT m.sender_id FROM chat_messages m WHERE m.room_id = r.id AND m.id > IFNULL(cu.cleared_up_to, 0) ORDER BY m.id DESC LIMIT 1) AS last_message_sender_id,
+         (SELECT COUNT(*) FROM chat_messages m WHERE m.room_id = r.id AND m.sender_id <> p_user_id AND m.is_read = 0 AND m.is_staff = 0 AND m.deleted_at IS NULL AND m.id > IFNULL(cu.cleared_up_to, 0)) AS unread_count
   FROM chat_rooms r
   JOIN users o ON o.id = IF(r.user_a_id = p_user_id, r.user_b_id, r.user_a_id)
-  WHERE r.user_a_id = p_user_id OR r.user_b_id = p_user_id
+  LEFT JOIN chat_room_users cu ON cu.room_id = r.id AND cu.user_id = p_user_id
+  WHERE (r.user_a_id = p_user_id OR r.user_b_id = p_user_id)
+    AND (cu.deleted_at IS NULL OR EXISTS (SELECT 1 FROM chat_messages m2 WHERE m2.room_id = r.id AND m2.id > cu.cleared_up_to))   -- a deleted conversation stays hidden until something newer arrives
   ORDER BY r.last_message_at DESC, r.id DESC;
 END$$
 
@@ -57,6 +60,7 @@ BEGIN
   DECLARE v_room BIGINT UNSIGNED;
   DECLARE v_limit INT;
   DECLARE v_offset INT;
+  DECLARE v_cleared BIGINT UNSIGNED DEFAULT 0;
   SELECT id INTO v_room FROM chat_rooms WHERE id = p_room_id AND (user_a_id = p_user_id OR user_b_id = p_user_id);
   IF v_room IS NULL THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'ROOM_NOT_FOUND';
@@ -64,10 +68,13 @@ BEGIN
   SET v_limit = LEAST(GREATEST(IFNULL(p_limit, 50), 1), 100);
   SET v_offset = GREATEST(IFNULL(p_offset, 0), 0);
 
-  UPDATE chat_messages SET is_read = 1 WHERE room_id = p_room_id AND sender_id <> p_user_id AND is_read = 0;
+  SELECT IFNULL(MAX(cleared_up_to), 0) INTO v_cleared FROM chat_room_users WHERE room_id = p_room_id AND user_id = p_user_id;
+  UPDATE chat_messages SET is_read = 1 WHERE room_id = p_room_id AND sender_id <> p_user_id AND is_read = 0 AND is_staff = 0;
 
-  SELECT id, room_id, sender_id, message_type, content, latitude, longitude, file_id, is_read, created_at
-  FROM chat_messages WHERE room_id = p_room_id
+  -- a deleted message shows only that it was deleted; what the person cleared is not returned
+  SELECT id, room_id, sender_id, message_type, IF(deleted_at IS NULL, content, NULL) AS content, IF(deleted_at IS NULL, latitude, NULL) AS latitude,
+         IF(deleted_at IS NULL, longitude, NULL) AS longitude, IF(deleted_at IS NULL, file_id, NULL) AS file_id, is_read, created_at, is_staff, (deleted_at IS NOT NULL) AS is_deleted
+  FROM chat_messages WHERE room_id = p_room_id AND id > v_cleared
   ORDER BY id DESC
   LIMIT v_limit OFFSET v_offset;
 END$$
@@ -127,7 +134,7 @@ BEGIN
   UPDATE chat_rooms SET last_message_at = UTC_TIMESTAMP(3) WHERE id = p_room_id;
   COMMIT;
 
-  SELECT id, room_id, sender_id, message_type, content, latitude, longitude, file_id, is_read, created_at
+  SELECT id, room_id, sender_id, message_type, content, latitude, longitude, file_id, is_read, created_at, is_staff, (deleted_at IS NOT NULL) AS is_deleted
   FROM chat_messages WHERE id = v_id;
 END$$
 
@@ -136,7 +143,8 @@ BEGIN
   SELECT COUNT(*) AS unread
   FROM chat_messages m
   JOIN chat_rooms r ON r.id = m.room_id
-  WHERE (r.user_a_id = p_user_id OR r.user_b_id = p_user_id) AND m.sender_id <> p_user_id AND m.is_read = 0;
+  WHERE (r.user_a_id = p_user_id OR r.user_b_id = p_user_id) AND m.sender_id <> p_user_id AND m.is_read = 0 AND m.is_staff = 0 AND m.deleted_at IS NULL
+    AND m.id > IFNULL((SELECT cu.cleared_up_to FROM chat_room_users cu WHERE cu.room_id = r.id AND cu.user_id = p_user_id), 0);
 END$$
 
 -- Saved searches (p_criteria is the validated search filter object as JSON). At most 20 per user.

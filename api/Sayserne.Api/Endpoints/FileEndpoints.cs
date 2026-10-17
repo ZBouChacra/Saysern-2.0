@@ -123,7 +123,12 @@ public static class FileEndpoints
         var viewer = AuthSession.CurrentUserId(ctx.User);
         // not allowed and not found look the same, so ids cannot be probed
         if (await files.ViewerAllowedAsync(id, viewer, ctx.RequestAborted) is not true) throw new AppException("FILE_NOT_FOUND", 404);
-        var file = await files.GetAsync(id, ctx.RequestAborted);
+        return await ServeAsync(ctx, await files.GetAsync(id, ctx.RequestAborted), storage);
+    }
+
+    /// <summary>Streams a stored file (used by the public download and by staff reading a conversation; the caller has already checked who may see it).</summary>
+    internal static async Task<IResult> ServeAsync(HttpContext ctx, FileRecord? file, IStorageRouter storage)
+    {
         if (file is null || file.Status != "ready" || file.Provider is null || file.StorageKey is null || file.ContentType is null) throw new AppException("FILE_NOT_FOUND", 404);
 
         Stream stream;

@@ -225,8 +225,8 @@ BEGIN
   SET v_id = LAST_INSERT_ID();
 
   UPDATE professions
-     SET avg_rating = (SELECT IFNULL(AVG(rating), 0) FROM reviews WHERE professional_id = v_pro),
-         total_reviews = (SELECT COUNT(*) FROM reviews WHERE professional_id = v_pro)
+     SET avg_rating = (SELECT IFNULL(AVG(rating), 0) FROM reviews WHERE professional_id = v_pro AND is_deleted = 0),
+         total_reviews = (SELECT COUNT(*) FROM reviews WHERE professional_id = v_pro AND is_deleted = 0)
    WHERE user_id = v_pro;
   COMMIT;
 
@@ -240,10 +240,10 @@ BEGIN
   SET v_limit = LEAST(GREATEST(IFNULL(p_limit, 50), 1), 100);
   SET v_offset = GREATEST(IFNULL(p_offset, 0), 0);
   SELECT r.id, r.rating, r.comment, r.created_at, u.first_name AS reviewer_first_name, u.last_name AS reviewer_last_name,
-         u.profile_photo AS reviewer_photo
+         u.profile_photo AS reviewer_photo, r.reply_text, r.replied_at, r.reply_edited_at
   FROM reviews r
   JOIN users u ON u.id = r.reviewer_id
-  WHERE r.professional_id = p_professional_id
+  WHERE r.professional_id = p_professional_id AND r.is_deleted = 0
   ORDER BY r.created_at DESC, r.id DESC
   LIMIT v_limit OFFSET v_offset;
 END$$

@@ -194,3 +194,28 @@ describe("payments and receipts", () => {
     expect((sum.mock.calls[0] as unknown as [string])[0]).toBe("/api/admin/payments/summary?from=2026-11-01");
   });
 });
+
+describe("moderation", () => {
+  it("lists reviews with filters, hides with a reason and restores", async () => {
+    const list = mockFetch(200, { items: [], total: 0, page: 1, pageSize: 25 });
+    await api.adminReviews("hidden", "rude & loud", 2);
+    expect((list.mock.calls[0] as unknown as [string])[0]).toBe("/api/admin/reviews?status=hidden&search=rude+%26+loud&page=2&pageSize=25");
+    const hide = mockFetch(200, { id: 5 });
+    await api.hideReview(5, "Abusive language");
+    expect([(hide.mock.calls[0] as unknown as [string])[0], JSON.parse((hide.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)]).toEqual(["/api/admin/reviews/5/hide", { reason: "Abusive language" }]);
+    const back = mockFetch(200, { id: 5 });
+    await api.restoreReview(5);
+    expect((back.mock.calls[0] as unknown as [string])[0]).toBe("/api/admin/reviews/5/restore");
+  });
+  it("lists conversations, reads one and writes as the team", async () => {
+    const list = mockFetch(200, { items: [], total: 0, page: 1, pageSize: 25 });
+    await api.adminChats("deleted", "Cara", 1);
+    expect((list.mock.calls[0] as unknown as [string])[0]).toBe("/api/admin/chats?filter=deleted&search=Cara&page=1&pageSize=25");
+    const read = mockFetch(200, { room: {}, messages: [] });
+    await api.readChat(12);
+    expect((read.mock.calls[0] as unknown as [string])[0]).toBe("/api/admin/chats/12/messages");
+    const post = mockFetch(201, { id: 1 });
+    await api.postStaffMessage(12, "Please be polite");
+    expect([(post.mock.calls[0] as unknown as [string])[0], JSON.parse((post.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)]).toEqual(["/api/admin/chats/12/messages", { content: "Please be polite" }]);
+  });
+});

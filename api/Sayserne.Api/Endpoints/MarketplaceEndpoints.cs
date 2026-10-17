@@ -127,6 +127,15 @@ public static class MarketplaceEndpoints
         r.MapGet("/eligible", async (HttpContext ctx, IBookingRepository bookings, long professionalId) =>
             Results.Ok(await bookings.EligibleAsync(ctx.UserId(), professionalId)));
 
+        r.MapPut("/{id:long}/reply", async (HttpContext ctx, long id, ReplyInput input, IBookingRepository bookings, MarketplaceNotifier notify, IUserRepository users) =>
+        {
+            var text = (input.Text ?? "").Trim();
+            if (text.Length == 0) throw new AppException("INVALID_REPLY", 400);
+            var reply = await bookings.ReplyToReviewAsync(ctx.UserId(), id, text);
+            var pro = await users.GetByIdAsync(ctx.UserId());
+            if (reply.FirstReply && pro is not null) await notify.ReviewReplied(reply.ReviewerId, ctx.UserId(), $"{pro.FirstName} {pro.LastName}".Trim());   // the reviewer hears about the first answer, not every edit
+            return Results.Ok(reply.Review);
+        });
         r.MapPost("", async (HttpContext ctx, ReviewInput input, IBookingRepository bookings, ISettingsService settings, MarketplaceNotifier notify, IUserRepository users) =>
         {
             var errors = new Dictionary<string, string>();
@@ -159,6 +168,16 @@ public static class MarketplaceEndpoints
         g.MapGet("/rooms/{roomId:long}/messages", async (HttpContext ctx, long roomId, IMessagingRepository chat, int? limit, int? offset) =>
             Results.Ok(await chat.MessagesAsync(ctx.UserId(), roomId, limit ?? 50, offset ?? 0)));
 
+        g.MapDelete("/rooms/{roomId:long}/messages/{messageId:long}", async (HttpContext ctx, long roomId, long messageId, IMessagingRepository chat) =>
+        {
+            await chat.DeleteMessageAsync(ctx.UserId(), roomId, messageId);
+            return Results.NoContent();
+        });
+        g.MapDelete("/rooms/{roomId:long}", async (HttpContext ctx, long roomId, IMessagingRepository chat) =>
+        {
+            await chat.DeleteRoomAsync(ctx.UserId(), roomId);
+            return Results.NoContent();
+        });
         g.MapPost("/rooms/{roomId:long}/messages", async (HttpContext ctx, long roomId, SendMessageInput input, IMessagingRepository chat, ISettingsService settings, MarketplaceNotifier notify, IUserRepository users) =>
         {
             var (type, content, lat, lng, fileId) = MarketplaceValidation.ValidateMessage(input, settings);

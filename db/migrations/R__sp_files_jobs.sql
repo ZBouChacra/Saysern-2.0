@@ -63,9 +63,11 @@ CREATE PROCEDURE sp_files_viewer_allowed(IN p_id CHAR(32), IN p_viewer_id BIGINT
 BEGIN
   SELECT (f.is_deleted = 0 AND (
             f.purpose IN ('profile_photo', 'banner_photo', 'ad_image')
-            OR (p_viewer_id IS NOT NULL AND f.owner_id = p_viewer_id)
-            OR (f.purpose = 'chat_media' AND p_viewer_id IS NOT NULL AND EXISTS (
-                  SELECT 1 FROM chat_rooms r WHERE r.id = f.room_id AND (r.user_a_id = p_viewer_id OR r.user_b_id = p_viewer_id)))
+            -- chat media: only the two people in the room (and the uploader), and not once the message that carries it was deleted
+            OR (NOT EXISTS (SELECT 1 FROM chat_messages dm WHERE dm.file_id = f.id AND dm.deleted_at IS NOT NULL)
+                AND ((p_viewer_id IS NOT NULL AND f.owner_id = p_viewer_id)
+                  OR (f.purpose = 'chat_media' AND p_viewer_id IS NOT NULL AND EXISTS (
+                        SELECT 1 FROM chat_rooms r WHERE r.id = f.room_id AND (r.user_a_id = p_viewer_id OR r.user_b_id = p_viewer_id)))))
           )) AS allowed
   FROM files f WHERE f.id = p_id;
 END$$

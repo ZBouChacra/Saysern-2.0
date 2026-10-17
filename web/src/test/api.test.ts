@@ -258,3 +258,20 @@ describe("search with the visitor's place", () => {
     expect((f3.mock.calls[0] as unknown as [string])[0]).toBe("/api/professionals/search?");
   });
 });
+
+describe("review answers and chat deletion", () => {
+  it("sends the professional's answer to the right review", async () => {
+    const fn = mockFetch(200, { id: 9, replyText: "Thank you" });
+    await api.replyToReview(9, "Thank you");
+    const [url, init] = fn.mock.calls[0] as unknown as [string, RequestInit];
+    expect([url, init.method, JSON.parse(init.body as string)]).toEqual(["/api/reviews/9/reply", "PUT", { text: "Thank you" }]);
+  });
+  it("deletes one message or a whole conversation, each with its own address", async () => {
+    const one = mockFetch(204);
+    await api.deleteMessage(4, 77);
+    expect([(one.mock.calls[0] as unknown as [string])[0], (one.mock.calls[0] as unknown as [string, RequestInit])[1].method]).toEqual(["/api/chat/rooms/4/messages/77", "DELETE"]);
+    const room = mockFetch(204);
+    await api.deleteRoom(4);
+    expect([(room.mock.calls[0] as unknown as [string])[0], (room.mock.calls[0] as unknown as [string, RequestInit])[1].method]).toEqual(["/api/chat/rooms/4", "DELETE"]);
+  });
+});

@@ -76,3 +76,10 @@ label.check { display: flex; align-items: center; gap: .4rem; font-weight: 500; 
 .with-sidebar { display: grid; grid-template-columns: 1fr; gap: 1rem; } @media (min-width: 900px) { .with-sidebar { grid-template-columns: 1fr 300px; align-items: start; } }
 .topbar { z-index: 40; }              /* the header (and the location popup inside it) must stack above page content such as ads */
 .place-picker { margin-inline-end: 1rem; }
+
+/* review answers and chat moderation */
+.reply-box { margin: .6rem 0 0 1rem; padding: .5rem .8rem; border-inline-start: 3px solid var(--accent, #1f6f5c); background: rgba(31,111,92,.06); border-radius: 6px; } .reply-box p { margin: .3rem 0 0; }
+.review-reply textarea { width: 100%; }
+.bubble.staff { background: #fff4d6; color: #4a3800; border: 1px solid #ecd9a0; align-self: center; max-width: 90%; } .staff-label { font-weight: 700; font-size: .75rem; letter-spacing: .03em; text-transform: uppercase; margin-bottom: .2rem; }
+.bubble.deleted { background: transparent; border: 1px dashed var(--line); } .no-pad { padding: 0; }
+@media (prefers-color-scheme: dark) { .bubble.staff { background: #3b3216; color: #f1deaa; border-color: #5a4a1d; } }

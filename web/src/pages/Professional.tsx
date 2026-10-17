@@ -4,7 +4,7 @@ import { api, errorMessage, type Eligible, type ProfessionalPage, type ReviewIte
 import { useAuth } from "../auth";
 import { AdSlot } from "../AdSlot";
 import { Avatar, Stars, fullName, money, useWeekdays, when } from "../components";
-import { useLookup } from "../config";
+import { useConfig, useLookup } from "../config";
 
 export default function Professional() {
   const { id } = useParams();
@@ -88,10 +88,37 @@ export default function Professional() {
           <div className="row spread"><strong>{fullName(r.reviewerFirstName, r.reviewerLastName)}</strong><Stars value={r.rating} /></div>
           {r.comment && <p>{r.comment}</p>}
           <div className="muted small">{when(r.createdAt)}</div>
+          <ReviewReply review={r} ownerName={profile.firstName} mine={user?.id === userId} onSaved={updated => setReviews(list => list.map(x => (x.id === updated.id ? { ...x, ...updated } : x)))} />
         </div>
       ))}
       <AdSlot position="sidebar" />
     </main>
+  );
+}
+
+/** The professional's answer to a review: shown to everyone, written (and edited) only by the professional it is about. */
+function ReviewReply({ review, ownerName, mine, onSaved }: { review: ReviewItem; ownerName: string; mine: boolean; onSaved: (r: ReviewItem) => void }) {
+  const cfg = useConfig();
+  const max = cfg.num("Reviews.MaxReplyLength") || 1000;
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(review.replyText ?? "");
+  const [error, setError] = useState<string | null>(null);
+  async function save() {
+    try { onSaved(await api.replyToReview(review.id, text.trim())); setEditing(false); setError(null); } catch (e) { setError(errorMessage(e)); }
+  }
+  return (
+    <div className="review-reply">
+      {review.replyText && !editing && <div className="reply-box"><strong>Reply from {ownerName}</strong>{review.replyEditedAt && <span className="muted small"> (edited)</span>}<p>{review.replyText}</p></div>}
+      {mine && !editing && <button className="link" onClick={() => { setText(review.replyText ?? ""); setEditing(true); }}>{review.replyText ? "Edit your reply" : "Reply"}</button>}
+      {mine && editing && (
+        <div>
+          <textarea aria-label="Your reply" rows={3} maxLength={max} value={text} onChange={e => setText(e.target.value)} />
+          <div className="muted small">{text.length} / {max}</div>
+          {error && <p className="error" role="alert">{error}</p>}
+          <div className="row"><button className="btn small" disabled={!text.trim()} onClick={() => void save()}>Save reply</button><button className="btn small secondary" onClick={() => setEditing(false)}>Cancel</button></div>
+        </div>
+      )}
+    </div>
   );
 }
 

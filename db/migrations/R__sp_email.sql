@@ -158,7 +158,8 @@ END$$
 CREATE PROCEDURE sp_chat_room_unread(IN p_room_id BIGINT UNSIGNED, IN p_user_id BIGINT UNSIGNED)
 BEGIN
   SELECT COUNT(*) AS unread FROM chat_messages m JOIN chat_rooms r ON r.id = m.room_id
-   WHERE m.room_id = p_room_id AND (r.user_a_id = p_user_id OR r.user_b_id = p_user_id) AND m.sender_id <> p_user_id AND m.is_read = 0;
+   WHERE m.room_id = p_room_id AND (r.user_a_id = p_user_id OR r.user_b_id = p_user_id) AND m.sender_id <> p_user_id AND m.is_read = 0 AND m.is_staff = 0 AND m.deleted_at IS NULL
+     AND m.id > IFNULL((SELECT cu.cleared_up_to FROM chat_room_users cu WHERE cu.room_id = p_room_id AND cu.user_id = p_user_id), 0);
 END$$
 
 DELIMITER ;

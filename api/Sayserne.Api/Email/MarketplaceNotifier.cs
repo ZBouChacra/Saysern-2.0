@@ -42,6 +42,19 @@ public sealed class MarketplaceNotifier(INotifier notifier, AccountEmails links,
         }
     });
 
+    public Task ReviewReplied(long reviewerId, long professionalId, string professionalName) => Safely(() => notifier.NotifyAsync("review_reply", reviewerId, new Dictionary<string, string>
+    {
+        ["professional"] = professionalName, ["link"] = links.Link($"/professional/{professionalId}"),
+    }));
+
+    /// <summary>The team wrote in a conversation: both people are told by e-mail (this event cannot be switched off).</summary>
+    public Task StaffMessage(Moderation.AdminChatHeader room) => Safely(async () =>
+    {
+        var link = links.Link($"/chats/{room.Id}");
+        await notifier.NotifyAsync("staff_message", room.UserAId, new Dictionary<string, string> { ["other"] = room.UserBName, ["link"] = link });
+        await notifier.NotifyAsync("staff_message", room.UserBId, new Dictionary<string, string> { ["other"] = room.UserAName, ["link"] = link });
+    });
+
     public Task ReviewReceived(ReviewCreated review, string reviewerName) => Safely(() => notifier.NotifyAsync("review_received", review.ProfessionalId, new Dictionary<string, string>
     {
         ["reviewer"] = reviewerName, ["rating"] = review.Rating.ToString(CultureInfo.InvariantCulture), ["link"] = links.Link($"/professional/{review.ProfessionalId}"),

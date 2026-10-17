@@ -33,6 +33,15 @@ export default function Chats() {
   useEffect(() => { const t = setInterval(() => { loadMessages(); loadRooms(); }, 5000); return () => clearInterval(t); }, [loadMessages, loadRooms]);
   useEffect(() => { bottom.current?.scrollIntoView({ block: "end" }); }, [messages.length]);
 
+  async function removeMessage(id: number) {
+    if (active === null || !window.confirm("Delete this message for everyone?")) return;
+    try { await api.deleteMessage(active, id); loadMessages(); } catch (err) { setError(errorMessage(err)); }
+  }
+  async function removeConversation() {
+    if (active === null || !window.confirm("Delete this conversation? It disappears from your list and your history is cleared. The other person keeps theirs.")) return;
+    try { await api.deleteRoom(active); setMessages([]); loadRooms(); navigate("/chats"); } catch (err) { setError(errorMessage(err)); }
+  }
+
   async function send(e: FormEvent) {
     e.preventDefault();
     if (active === null || !text.trim()) return;
@@ -86,16 +95,19 @@ export default function Chats() {
         {rooms.map(r => (
           <button key={r.id} className={`room ${r.id === active ? "active" : ""}`} onClick={() => navigate(`/chats/${r.id}`)}>
             <strong>{fullName(r.otherFirstName, r.otherLastName)}</strong>{r.unreadCount > 0 && <span className="badge">{r.unreadCount}</span>}
-            <div className="muted small">{r.lastMessageType === "location" ? "📍 Location" : r.lastMessageType === "image" ? "🖼 Photo" : r.lastMessageType === "video" ? "🎬 Video" : r.lastMessageContent ?? "No messages yet"}</div>
+            <div className="muted small">{r.lastMessageType === "location" ? "📍 Location" : r.lastMessageType === "image" ? "🖼 Photo" : r.lastMessageType === "video" ? "🎬 Video" : r.lastMessageType === "deleted" ? "Message deleted" : r.lastMessageContent ?? "No messages yet"}</div>
           </button>
         ))}
       </aside>
       <section>
         {active === null ? <p className="muted">Choose a conversation.</p> : (
           <>
+            <div className="row spread no-pad"><span /><button className="link" onClick={() => void removeConversation()}>Delete conversation</button></div>
             <div className="thread" aria-live="polite">
               {messages.map(m => (
-                <div key={m.id} className={`bubble ${m.senderId === user?.id ? "mine" : ""}`}>
+                <div key={m.id} className={`bubble ${m.senderId === user?.id && !m.isStaff ? "mine" : ""} ${m.isStaff ? "staff" : ""} ${m.isDeleted ? "deleted" : ""}`}>
+                  {m.isStaff && <div className="staff-label">SaySerné team</div>}
+                  {m.isDeleted ? <em className="muted">This message was deleted</em> : <>
                   {m.messageType === "image" && m.fileId
                     ? <a href={`/api/files/${m.fileId}`} target="_blank" rel="noopener noreferrer"><img className="chat-media" src={`/api/files/${m.fileId}`} alt="Shared photo" loading="lazy" /></a>
                     : m.messageType === "video" && m.fileId
@@ -104,7 +116,8 @@ export default function Chats() {
                     ? <a href={`https://www.openstreetmap.org/?mlat=${m.latitude}&mlon=${m.longitude}#map=16/${m.latitude}/${m.longitude}`} target="_blank" rel="noopener noreferrer">📍 Shared location</a>
                     : m.content}
                   {(m.messageType === "image" || m.messageType === "video") && m.content && <div className="caption">{m.content}</div>}
-                  <div className="muted small">{when(m.createdAt)}</div>
+                  </>}
+                  <div className="muted small">{when(m.createdAt)}{m.senderId === user?.id && !m.isStaff && !m.isDeleted && <> · <button className="link" aria-label="Delete message" onClick={() => void removeMessage(m.id)}>Delete</button></>}</div>
                 </div>
               ))}
               {pending.map(p => (
