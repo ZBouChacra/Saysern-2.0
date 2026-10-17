@@ -9,7 +9,7 @@ DELIMITER $$
 CREATE PROCEDURE sp_identities_find_user(IN p_provider VARCHAR(30), IN p_subject VARCHAR(255))
 BEGIN
   SELECT u.id, u.email, u.email_verified, u.password_hash, u.first_name, u.last_name, u.role,
-         u.profile_type, u.is_locked, u.failed_login_attempts, u.locked_until, u.created_at, EXISTS (SELECT 1 FROM premium_days pdx JOIN professions prx ON prx.id = pdx.profession_id WHERE prx.user_id = u.id AND pdx.day = UTC_DATE()) AS is_premium, u.is_starred
+         u.profile_type, u.is_locked, u.failed_login_attempts, u.locked_until, u.created_at, u.is_disabled, u.time_zone, u.preferred_language, EXISTS (SELECT 1 FROM premium_days pdx JOIN professions prx ON prx.id = pdx.profession_id WHERE prx.user_id = u.id AND pdx.day = UTC_DATE()) AS is_premium, u.is_starred
   FROM user_identities i
   JOIN users u ON u.id = i.user_id
   WHERE i.provider = p_provider AND i.subject = p_subject;

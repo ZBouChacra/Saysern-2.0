@@ -291,3 +291,15 @@ describe("contact form", () => {
     expect(err.fieldErrors.email).toContain("valid");
   });
 });
+
+describe("brand colours", () => {
+  it("lightens a colour for dark pages and measures contrast with white text", async () => {
+    const { mix, contrastWithWhite } = await import("../brand");
+    expect(mix("#000000", "#ffffff", 0.5)).toBe("#808080");
+    expect(mix("#2d6d5f", "#ffffff", 0)).toBe("#2d6d5f");
+    expect(contrastWithWhite("#000000")).toBeGreaterThan(20);
+    expect(contrastWithWhite("#ffffff")).toBeLessThan(1.1);
+    expect(contrastWithWhite("#2d6d5f")).toBeGreaterThan(4.5);   // the default green is readable under white text
+    expect(contrastWithWhite("#ffe066")).toBeLessThan(2);        // a pale yellow is not
+  });
+});

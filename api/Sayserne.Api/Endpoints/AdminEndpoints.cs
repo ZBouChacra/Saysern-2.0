@@ -22,6 +22,28 @@ public static class AdminEndpoints
             return Results.Ok(new PagedResult<AdminUserDto>(result.Items.Select(AdminUserDto.From).ToList(), result.Total, result.Page, result.PageSize));
         }).RequirePermission("users.read");
 
+        // Everything about one person, for support: account, profile (with the private details), listings with their weekly hours, recent appointments and a few counts.
+        // It shows personal data, so every opening is written to the audit log.
+        g.MapGet("/users/{id:long}", async (HttpContext ctx, long id, IUserRepository users, IProfessionalRepository profiles, IBookingRepository bookings, IStoredProcedureExecutor db, IPlatformRepository platform) =>
+        {
+            var user = await users.GetByIdAsync(id) ?? throw new AppException("USER_NOT_FOUND", 404);
+            var counts = (await db.QueryAsync("sp_admin_user_counts", new ProcParams().Add("p_user_id", id), r => new
+            {
+                appointmentsAsClient = r.Long("appointments_as_client"), appointmentsAsProfessional = r.Long("appointments_as_professional"), reviewsWritten = r.Long("reviews_written"),
+                reviewsReceived = r.Long("reviews_received"), reviewsHidden = r.Long("reviews_hidden"), conversations = r.Long("conversations"), premiumBatches = r.Long("premium_batches"),
+            }, ctx.RequestAborted))[0];
+            await platform.WriteAuditAsync(ctx.UserId(), "users.view", "user", id.ToString(), $"Opened the details of {user.Email}", null, ctx.Connection.RemoteIpAddress?.ToString(), ctx.RequestAborted);
+            return Results.Ok(new
+            {
+                user = user.ToDto(),
+                profile = await profiles.GetPrivateProfileAsync(id, ctx.RequestAborted),
+                professions = await profiles.ListProfessionsAsync(id, false, ctx.RequestAborted),
+                availability = await profiles.GetAvailabilityAsync(id, ctx.RequestAborted),
+                appointments = (await bookings.ListAppointmentsAsync(id, ctx.RequestAborted)).Take(25).ToList(),
+                counts,
+            });
+        }).RequirePermission("users.read");
+
         g.MapPost("/users/{id:long}/lock", async (HttpContext ctx, long id, SetLockedRequest body, IAdminUserRepository admin) =>
         {
             if (ctx.UserId() == id) throw new AppException("CANNOT_MODIFY_SELF", 400);

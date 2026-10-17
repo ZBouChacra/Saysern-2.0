@@ -63,3 +63,94 @@ public class DashboardTests
         Assert.Equal((2L, 80m), (total.GetProperty("receiptsLast30Days").GetInt64(), total.GetProperty("receivedLast30Days").GetDecimal()));   // the premium receipt (7 days at 10.00 = 70) is added to the ad's 10.00
     }
 }
+
+public class DashboardYearTests
+{
+    private static async Task<JsonElement> Year(TestClient c, string? year = null) { var (s, b) = await c.GetAsync("/api/admin/dashboard/year" + (year is null ? "" : "?year=" + year)); Assert.Equal(HttpStatusCode.OK, s); return b; }
+    private static JsonElement Month(JsonElement y, int month) => y.GetProperty("months").EnumerateArray().Single(m => m.GetProperty("month").GetInt32() == month);
+
+    [Fact]
+    public async Task The_year_view_shows_twelve_months_with_only_the_columns_each_staff_member_may_see()
+    {
+        await using var s = await AdTests.SceneHandle.StartAsync();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await s.Host.NewClient().GetAsync("/api/admin/dashboard/year")).Status);
+        var (user, _, _) = await s.Host.RegisterAsync();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await user.GetAsync("/api/admin/dashboard/year")).Status);
+        var (blank, _, _) = await s.Host.CreateStaffAsync("settings.read");
+        var none = await Year(blank);
+        Assert.Equal(12, none.GetProperty("months").GetArrayLength());
+        Assert.Empty(none.GetProperty("columns").EnumerateArray());                                                          // nothing to show, but not an error
+        var (money, _, _) = await s.Host.CreateStaffAsync("payments.read");
+        Assert.Equal(new[] { "receipts", "received", "voided" }, (await Year(money)).GetProperty("columns").EnumerateArray().Select(c => c.GetString()!).ToArray());
+        var (people, _, _) = await s.Host.CreateStaffAsync("users.read", "reviews.read", "contact.read");
+        Assert.Equal(new[] { "newUsers", "appointments", "reviews", "contactMessages" }, (await Year(people)).GetProperty("columns").EnumerateArray().Select(c => c.GetString()!).ToArray());
+        Assert.Equal(7, (await Year(s.Admin)).GetProperty("columns").GetArrayLength());                                      // a super admin sees all of them
+    }
+
+    [Fact]
+    public async Task Counts_land_in_the_right_month_and_year_and_the_list_of_years_includes_every_year_with_data()
+    {
+        await using var s = await AdTests.SceneHandle.StartAsync();
+        var thisYear = DateTime.UtcNow.Year; var thisMonth = DateTime.UtcNow.Month;
+        var before = Month(await Year(s.Admin), thisMonth).GetProperty("newUsers").GetInt64();
+        var (_, _, a) = await s.Host.RegisterAsync(); var (_, _, b) = await s.Host.RegisterAsync(); var (_, _, c) = await s.Host.RegisterAsync();
+        var other = thisMonth == 3 ? 4 : 3;                                                                                   // a month that is not this one
+        await s.Iso.Db.ExecAsync($"UPDATE users SET created_at = '2025-{other:00}-10 12:00:00' WHERE id = {a}");               // one person who joined in another month of 2025...
+        await s.Iso.Db.ExecAsync($"UPDATE users SET created_at = '2025-{thisMonth:00}-10 12:00:00' WHERE id = {b}");           // ...and one in the SAME month of last year: it must not be counted this year
+        Assert.Equal(before + 1, Month(await Year(s.Admin), thisMonth).GetProperty("newUsers").GetInt64());                  // only the third is this year
+        var y2025 = await Year(s.Admin, "2025");
+        Assert.Equal(1, Month(y2025, other).GetProperty("newUsers").GetInt64());
+        Assert.Equal(1, Month(y2025, thisMonth).GetProperty("newUsers").GetInt64());
+        Assert.Equal(0, Month(y2025, thisMonth == 12 ? 1 : thisMonth + 1).GetProperty("newUsers").GetInt64());
+
+        var ad = await s.NewAd("Yearly"); var (st, batch) = await s.Book(ad, 0, 1);
+        Assert.Equal(HttpStatusCode.Created, st);
+        Assert.Equal(HttpStatusCode.OK, (await s.Admin.PostAsync($"/api/admin/ads/batches/{batch.GetProperty("id").GetInt64()}/status", new { status = "paid", billedTo = "Year Co", method = "cash" })).Item1);
+        var now = Month(await Year(s.Admin), thisMonth);
+        Assert.Equal((1L, 10m), (now.GetProperty("receipts").GetInt64(), now.GetProperty("received").GetDecimal()));
+        await s.Iso.Db.ExecAsync("UPDATE payments SET received_on = '2025-06-15'");                                           // as if it had been paid last June
+        var june = Month(await Year(s.Admin, "2025"), 6);
+        Assert.Equal((1L, 10m), (june.GetProperty("receipts").GetInt64(), june.GetProperty("received").GetDecimal()));
+        Assert.Equal(0, Month(await Year(s.Admin), thisMonth).GetProperty("receipts").GetInt64());                            // and no longer counts this year
+
+        var years = (await Year(s.Admin)).GetProperty("years").EnumerateArray().Select(y => y.GetInt32()).ToList();
+        Assert.Equal(years.OrderByDescending(y => y).ToList(), years);                                                        // newest first
+        Assert.True(years.Contains(thisYear) && years.Contains(2025));
+        _ = c;
+    }
+
+    [Theory]
+    [InlineData("abc")] [InlineData("1999")] [InlineData("3000")] [InlineData("-5")] [InlineData("2026.5")] [InlineData("20 26")]
+    public async Task A_year_that_is_not_a_sensible_year_is_refused(string year)
+    {
+        await using var iso = await IsolatedHost.StartAsync();
+        var (admin, _, _) = await iso.Host.CreateAdminAsync();
+        var (st, body) = await admin.GetAsync("/api/admin/dashboard/year?year=" + Uri.EscapeDataString(year));
+        Assert.Equal(HttpStatusCode.BadRequest, st); Assert.True(body.GetProperty("errors").TryGetProperty("year", out _));
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.GetAsync("/api/admin/dashboard/year.csv?year=" + Uri.EscapeDataString(year))).Status);
+    }
+
+    [Fact]
+    public async Task The_spreadsheet_is_a_csv_with_a_byte_order_mark_twelve_rows_and_only_the_permitted_columns()
+    {
+        await using var s = await AdTests.SceneHandle.StartAsync();
+        var ad = await s.NewAd("Csv"); var (_, batch) = await s.Book(ad, 0, 1);
+        await s.Admin.PostAsync($"/api/admin/ads/batches/{batch.GetProperty("id").GetInt64()}/status", new { status = "paid", billedTo = "Csv Co", method = "cash" });
+        await s.Iso.Db.ExecAsync("UPDATE payments SET received_on = '2025-06-15'");
+        var res = await s.Admin.GetBytesAsync("/api/admin/dashboard/year.csv?year=2025");
+        Assert.Equal(HttpStatusCode.OK, res.Status);
+        Assert.Equal("text/csv", res.ContentHeaders.ContentType!.MediaType);
+        Assert.Contains("sayserne-2025.csv", res.ContentHeaders.ContentDisposition!.ToString());
+        var bytes = res.Bytes; Assert.True(bytes.Length > 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF);        // Excel reads it as UTF-8
+        var lines = System.Text.Encoding.UTF8.GetString(bytes, 3, bytes.Length - 3).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(13, lines.Length);
+        Assert.Equal("Year,Month,New users,Appointments requested,Reviews,Contact messages,Receipts issued,Amount received (USD),Receipts voided", lines[0]);
+        var june = lines[6].Split(',');                                                                                        // the June row
+        Assert.Equal(("2025", "June", "0", "0", "0", "0", "1", "0"), (june[0], june[1], june[2], june[3], june[4], june[5], june[6], june[8]));
+        Assert.Equal(10m, decimal.Parse(june[7], System.Globalization.CultureInfo.InvariantCulture));
+        var (money, _, _) = await s.Host.CreateStaffAsync("payments.read");
+        var onlyMoney = System.Text.Encoding.UTF8.GetString((await money.GetBytesAsync("/api/admin/dashboard/year.csv?year=2025")).Bytes).Split("\r\n")[0].TrimStart('\uFEFF');
+        Assert.Equal("Year,Month,Receipts issued,Amount received (USD),Receipts voided", onlyMoney);                              // no columns for areas they may not see
+        Assert.Equal(HttpStatusCode.Unauthorized, (await s.Host.NewClient().GetBytesAsync("/api/admin/dashboard/year.csv")).Status);
+    }
+}

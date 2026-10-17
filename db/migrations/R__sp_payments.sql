@@ -84,8 +84,9 @@ END$$
 CREATE PROCEDURE sp_payments_get(IN p_id BIGINT UNSIGNED)
 BEGIN
   SELECT p.id, p.seq, p.receipt_number, p.kind, p.ad_batch_id, p.premium_batch_id, p.description, p.quantity, p.unit_price, p.subtotal, p.vat_percent, p.vat_amount, p.total, p.currency,
-         p.billed_to, p.billed_details, p.method, p.reference, p.received_on, p.notes, p.status, p.void_reason, p.voided_at, p.issued_at,
+         p.billed_to, p.billed_details, p.method, p.reference, p.received_on, p.notes, p.status, p.void_reason, p.voided_at, p.issued_at, p.description_ar,
          (SELECT t.name FROM lookup_values v JOIN lookup_translations t ON t.value_id = v.id AND t.language = 'en' WHERE v.type_code = 'payment_method' AND v.code = p.method) AS method_name,
+         (SELECT t.name FROM lookup_values v JOIN lookup_translations t ON t.value_id = v.id AND t.language = 'ar' WHERE v.type_code = 'payment_method' AND v.code = p.method) AS method_name_ar,
          (SELECT value_text FROM app_settings WHERE setting_key = 'Billing.CompanyName')    AS company_name,
          (SELECT value_text FROM app_settings WHERE setting_key = 'Billing.CompanyAddress') AS company_address,
          (SELECT value_text FROM app_settings WHERE setting_key = 'Billing.CompanyTaxId')   AS company_tax_id,

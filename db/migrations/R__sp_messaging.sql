@@ -26,7 +26,7 @@ BEGIN
   IF p_user_id = p_other_id THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'CANNOT_CHAT_SELF';
   END IF;
-  SELECT id INTO v_other FROM users WHERE id = p_other_id AND is_locked = 0;
+  SELECT id INTO v_other FROM users WHERE id = p_other_id AND is_locked = 0 AND is_disabled = 0;
   IF v_other IS NULL THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'USER_NOT_FOUND';
   END IF;

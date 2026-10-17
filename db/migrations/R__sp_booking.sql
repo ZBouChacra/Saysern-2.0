@@ -66,7 +66,7 @@ BEGIN
   SET v_ends = DATE_ADD(p_starts_at, INTERVAL p_duration_minutes MINUTE);
 
   START TRANSACTION;
-  SELECT profile_type, is_locked INTO v_type, v_locked FROM users WHERE id = p_professional_id FOR UPDATE;
+  SELECT profile_type, (is_locked OR is_disabled) INTO v_type, v_locked FROM users WHERE id = p_professional_id FOR UPDATE;
   IF v_type IS NULL OR v_type <> 'professional' OR v_locked = 1 THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'PROFESSIONAL_NOT_FOUND';
   END IF;

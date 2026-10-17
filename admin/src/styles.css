@@ -36,7 +36,7 @@ button.link { background: none; border: 0; color: var(--green); cursor: pointer;
 dl { display: grid; grid-template-columns: max-content 1fr; gap: .4rem 1rem; } dt { color: var(--muted); } dd { margin: 0; }
 .pill { font-size: .75rem; padding: .1rem .5rem; border-radius: 999px; border: 1px solid var(--line); } .pill.ok { color: var(--green); border-color: var(--green); } .pill.bad { color: var(--danger); border-color: var(--danger); }
 .table-wrap { overflow-x: auto; } table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid var(--line); white-space: nowrap; } th { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+th, td { text-align: start; padding: .5rem .6rem; border-bottom: 1px solid var(--line); white-space: nowrap; } th { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .actions { display: flex; gap: .4rem; }
 @media (max-width: 520px) { .grid2 { grid-template-columns: 1fr; } .card { margin: 1rem; } }
 
@@ -46,20 +46,20 @@ select, textarea { display: block; width: 100%; margin-top: .3rem; padding: .6re
 label.check { display: flex; align-items: center; gap: .4rem; font-weight: 500; margin: .5rem 0; } label.check input { width: auto; margin: 0; }
 .list { display: grid; gap: .75rem; } .panel { border: 1px solid var(--line); border-radius: 12px; padding: 1rem; margin: .75rem 0; }
 .listing { display: flex; gap: 1rem; align-items: center; padding: .85rem 1rem; border: 1px solid var(--line); border-radius: 12px; color: inherit; text-decoration: none; }
-.listing:hover { border-color: var(--green); } .grow { flex: 1; } .right { text-align: right; white-space: nowrap; }
+.listing:hover { border-color: var(--green); } .grow { flex: 1; } .right { text-align: end; white-space: nowrap; }
 .avatar { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--green); color: #fff; font: 700 1.1rem Georgia, serif; flex: none; } .avatar.big { width: 64px; height: 64px; font-size: 1.6rem; }
 .stars { color: var(--gold); letter-spacing: 1px; } .small { font-size: .8rem; } ul.plain { list-style: none; padding: 0; margin: .5rem 0; } h2 { font-family: Georgia, serif; margin-top: 1.5rem; }
-.badge { background: #d93025; color: #fff; border-radius: 999px; padding: 0 .45rem; font-size: .72rem; margin-left: .3rem; font-weight: 700; }
+.badge { background: #d93025; color: #fff; border-radius: 999px; padding: 0 .45rem; font-size: .72rem; margin-inline-start: .3rem; font-weight: 700; }
 .hero input { max-width: 260px; } .ok-text { color: var(--green); }
-.chat { display: grid; grid-template-columns: 260px 1fr; gap: 1rem; min-height: 460px; } .chat aside { border-right: 1px solid var(--line); padding-right: 1rem; }
-.room { display: block; width: 100%; text-align: left; background: none; border: 1px solid transparent; border-radius: 10px; padding: .6rem; cursor: pointer; color: inherit; font: inherit; } .room.active, .room:hover { background: var(--bg); border-color: var(--line); }
+.chat { display: grid; grid-template-columns: 260px 1fr; gap: 1rem; min-height: 460px; } .chat aside { border-inline-end: 1px solid var(--line); padding-inline-end: 1rem; }
+.room { display: block; width: 100%; text-align: start; background: none; border: 1px solid transparent; border-radius: 10px; padding: .6rem; cursor: pointer; color: inherit; font: inherit; } .room.active, .room:hover { background: var(--bg); border-color: var(--line); }
 .thread { height: 340px; overflow-y: auto; display: flex; flex-direction: column; gap: .5rem; padding: .5rem; } .bubble { max-width: 75%; padding: .5rem .8rem; border-radius: 14px; background: var(--bg); border: 1px solid var(--line); align-self: flex-start; word-wrap: anywhere; }
 .bubble.mine { align-self: flex-end; background: var(--green); color: #fff; border-color: var(--green); } .bubble.mine .muted, .bubble.mine a { color: #e6f4ef; } .composer input { flex: 1; max-width: none; }
-.topbar nav { flex-wrap: wrap; } @media (max-width: 700px) { .chat { grid-template-columns: 1fr; } .chat aside { border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 1rem; } .listing { flex-wrap: wrap; } }
+.topbar nav { flex-wrap: wrap; } @media (max-width: 700px) { .chat { grid-template-columns: 1fr; } .chat aside { border-inline-end: 0; border-bottom: 1px solid var(--line); padding: 0 0 1rem; } .listing { flex-wrap: wrap; } }
 
 /* ---- back office ---- */
 .shell { display: grid; grid-template-columns: 210px 1fr; min-height: calc(100vh - 56px); }
-.side { border-right: 1px solid var(--line); padding: 1rem .75rem; background: var(--card); } .side a { display: block; padding: .45rem .7rem; border-radius: 8px; color: var(--text); text-decoration: none; } .side a.active { background: var(--bg); color: var(--green); font-weight: 600; }
+.side { border-inline-end: 1px solid var(--line); padding: 1rem .75rem; background: var(--card); } .side a { display: block; padding: .45rem .7rem; border-radius: 8px; color: var(--text); text-decoration: none; } .side a.active { background: var(--bg); color: var(--green); font-weight: 600; }
 .content { padding: 0 1rem 2rem; min-width: 0; } .card.full { max-width: none; margin: 1rem 0; }
 .toolbar { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin-bottom: .75rem; } .toolbar input, .toolbar select { max-width: 260px; margin-top: 0; }
 table.t td, table.t th { white-space: normal; vertical-align: top; } .actions { flex-wrap: wrap; }
@@ -68,14 +68,14 @@ table.t td, table.t th { white-space: normal; vertical-align: top; } .actions { 
 .codes { columns: 2; list-style: none; padding: 0; } .codes li { padding: .2rem 0; }
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: grid; place-items: center; z-index: 50; padding: 1rem; } .modal > div { background: var(--card); border-radius: 14px; padding: 1.25rem; width: min(560px, 100%); max-height: 92vh; overflow: auto; }
 .perm-group { margin: .5rem 0; } .perm-group h4 { margin: .4rem 0 .2rem; } .chk { display: flex; gap: .5rem; align-items: flex-start; font-weight: 400; margin: .25rem 0; } .chk input { width: auto; margin-top: .25rem; }
-.two { display: grid; grid-template-columns: 220px 1fr; gap: 1rem; } @media (max-width: 800px) { .shell, .two { grid-template-columns: 1fr; } .side { border-right: 0; border-bottom: 1px solid var(--line); } }
+.two { display: grid; grid-template-columns: 220px 1fr; gap: 1rem; } @media (max-width: 800px) { .shell, .two { grid-template-columns: 1fr; } .side { border-inline-end: 0; border-bottom: 1px solid var(--line); } }
 pre.json { background: var(--bg); padding: .5rem; border-radius: 8px; overflow: auto; max-height: 200px; font-size: .8rem; }
 
 /* receipts */
 .receipt-wrap { max-width: 800px; margin: 1rem auto; padding: 0 1rem; } .receipt { background: #fff; color: #111; border: 1px solid var(--line); border-radius: 8px; padding: 2rem; margin-top: 1rem; position: relative; }
-.receipt-head { display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; } .receipt-head h1 { margin: 0 0 .3rem; } .receipt-no { text-align: right; } .receipt-no .big { font: 700 1.5rem Georgia, serif; }
-.receipt .pre { white-space: pre-line; } .receipt .strong { font-weight: 700; } .receipt-lines { width: 100%; margin: 1.2rem 0; } .receipt-lines td:last-child, .receipt-lines th:last-child { text-align: right; } .receipt-pay { margin-top: .5rem; }
-.void-banner { position: absolute; top: 40%; left: 10%; right: 10%; text-align: center; font: 700 2.4rem sans-serif; color: rgba(190, 30, 30, .35); transform: rotate(-12deg); border: 4px solid rgba(190, 30, 30, .35); padding: .3rem; pointer-events: none; }
+.receipt-head { display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; } .receipt-head h1 { margin: 0 0 .3rem; } .receipt-no { text-align: end; } .receipt-no .big { font: 700 1.5rem Georgia, serif; }
+.receipt .pre { white-space: pre-line; } .receipt .strong { font-weight: 700; } .receipt-lines { width: 100%; margin: 1.2rem 0; } .receipt-lines td:last-child, .receipt-lines th:last-child { text-align: end; } .receipt-pay { margin-top: .5rem; }
+.void-banner { position: absolute; top: 40%; inset-inline: 10%; text-align: center; font: 700 2.4rem sans-serif; color: rgba(190, 30, 30, .35); transform: rotate(-12deg); border: 4px solid rgba(190, 30, 30, .35); padding: .3rem; pointer-events: none; }
 @media print { aside, .topbar, .no-print, nav { display: none !important; } .shell { display: block; } body { background: #fff; } .receipt-wrap { max-width: none; margin: 0; padding: 0; } .receipt { border: 0; padding: 0; margin: 0; } }
 
 /* conversation moderation */

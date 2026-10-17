@@ -1,6 +1,7 @@
 -- Repeatable: the numbers on the back-office home page. One cheap row of counts; the API shows each group only to staff who may see it.
 
 DROP PROCEDURE IF EXISTS sp_dashboard_stats;
+DROP PROCEDURE IF EXISTS sp_dashboard_year;
 
 DELIMITER $$
 
@@ -34,6 +35,25 @@ BEGIN
     (SELECT COUNT(*) FROM jobs WHERE status IN ('pending', 'running'))                                                   AS jobs_pending,
     (SELECT COUNT(*) FROM email_outbox WHERE status = 'failed')                                                          AS emails_failed,
     (SELECT COUNT(*) FROM email_outbox WHERE status = 'queued')                                                          AS emails_queued;
+END$$
+
+-- One row per month of a calendar year, and the list of years that have any data (the second result set). Counts by the date things happened (UTC).
+CREATE PROCEDURE sp_dashboard_year(IN p_year INT)
+BEGIN
+  WITH RECURSIVE m (n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM m WHERE n < 12)
+  SELECT m.n AS month,
+    (SELECT COUNT(*) FROM users          WHERE YEAR(created_at) = p_year AND MONTH(created_at) = m.n)                                   AS new_users,
+    (SELECT COUNT(*) FROM appointments   WHERE YEAR(created_at) = p_year AND MONTH(created_at) = m.n)                                   AS appointments,
+    (SELECT COUNT(*) FROM reviews        WHERE is_deleted = 0 AND YEAR(created_at) = p_year AND MONTH(created_at) = m.n)                 AS reviews,
+    (SELECT COUNT(*) FROM contact_messages WHERE status <> 'spam' AND YEAR(created_at) = p_year AND MONTH(created_at) = m.n)             AS contact_messages,
+    (SELECT COUNT(*) FROM payments       WHERE status = 'issued' AND YEAR(received_on) = p_year AND MONTH(received_on) = m.n)           AS receipts,
+    (SELECT IFNULL(SUM(total), 0) FROM payments WHERE status = 'issued' AND YEAR(received_on) = p_year AND MONTH(received_on) = m.n)    AS received,
+    (SELECT COUNT(*) FROM payments       WHERE status = 'void' AND YEAR(received_on) = p_year AND MONTH(received_on) = m.n)             AS voided
+  FROM m ORDER BY m.n;
+  SELECT y AS year FROM (
+    SELECT YEAR(created_at) AS y FROM users UNION SELECT YEAR(created_at) FROM appointments UNION SELECT YEAR(created_at) FROM reviews
+    UNION SELECT YEAR(created_at) FROM contact_messages UNION SELECT YEAR(received_on) FROM payments UNION SELECT YEAR(UTC_DATE())
+  ) years WHERE y IS NOT NULL ORDER BY y DESC;
 END$$
 
 DELIMITER ;

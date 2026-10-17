@@ -16,8 +16,8 @@ Staff    ──▶ admin/ ─/api──┘      │  cookie sessions (separate f
  (password + authenticator)       └─ Google OIDC (public site only)
 ```
 
-> **Status: phases 1, 2, 3a, 3b and 3c done**: files and media, background jobs, e-mail, saved-search digests, advertising, premium listings, and fees with manual payments and printable receipts, all with their screens. Foundation and authentication (1), the core marketplace (2), and the **configuration platform** (3a): runtime settings, lookups, translated texts, audit log, roles and permissions, two-factor back-office sign-in, user/catalog management — in a separate admin app.
-> Not built yet: the full Arabic and right-to-left screens, theme and the user Settings page, per-user time zones, marketing sections, account disabling (4). The mobile app comes after the web application.
+> **Status: phases 1, 2, 3a, 3b, 3c and 4 done (the mobile app comes next)**: files and media, background jobs, e-mail, saved-search digests, advertising, premium listings, and fees with manual payments and printable receipts, all with their screens. Foundation and authentication (1), the core marketplace (2), and the **configuration platform** (3a): runtime settings, lookups, translated texts, audit log, roles and permissions, two-factor back-office sign-in, user/catalog management — in a separate admin app.
+> Not built yet: the mobile app.
 
 ---
 
@@ -377,6 +377,53 @@ There is no payment gateway yet: staff **record the money they received** and th
 
 **Dashboard.** The back-office home page shows headline numbers, each group only to staff whose role may see that area: unanswered messages, users and appointments, reviews, ads running and premium listings today, money received this month and in 30 days, failed jobs and e-mails, and recent activity. A staff member with no relevant permission simply sees an empty page.
 
+## Languages, right-to-left, themes and account settings (phase 4)
+
+**English and Arabic everywhere.** The public site, the back office, e-mails and receipts all follow the person's language; Arabic switches the whole layout to right-to-left (the stylesheets use start/end, never left/right). A signed-in person's saved language applies when they sign in; the header switcher changes it for the visit (and saves it for a signed-in person on the public site). The back office remembers its language per browser.
+
+**How texts work.** Every phrase on screen is written in English in the code as `t("Find a professional")`; the English phrase *is* its key, so English works even with nothing loaded. Each phrase is stored in the database as a text `ui:<phrase>` in both languages, so an admin can reword or translate anything in the back office (**Texts**) without a release. Long phrases use a short key made of their start plus a hash. Sentences that contain a link or bold text use `tx("… {link} …", { link: <Link…/> })`, and plurals use `tn(n, "1 review", "{n} reviews")`, so a translation can order the words naturally.
+
+**Adding or changing a phrase** (developers):
+
+1. Write it with `t("...")` in the code (public site: `web/src`, back office: `admin/src`).
+2. Add its Arabic to `db/tools/ui_ar_web.json` or `db/tools/ui_ar_admin.json`.
+3. Run `python3 db/tools/gen_ui_texts.py`. It rewrites `db/migrations/R__ui_texts.sql`, a *repeatable* migration: the next `migrate` stores new phrases and refreshes the ones nobody has edited, and **never overwrites wording an admin changed**.
+
+`npm test` fails in either app if a phrase used in the code has no Arabic, if an Arabic text lost a `{placeholder}`, or if a translation is no longer used. **All Arabic here is a draft by the developer and should be reviewed by a native speaker**, especially the Terms, the Privacy policy and the back-office screens. Arabic plurals in the back office are simplified (one wording for one, one for the rest).
+
+**Account settings** (public site → *Settings*): language; time zone (a list an admin maintains in Lookups); theme (same as device / light / dark); notification choices; **change password** (needs the current password, follows the password rules, signs out every other device, and sends a "your password was changed" e-mail); and **disable my account**.
+
+* Disabling needs the password (or, for a Google-only account, the person's e-mail address typed again). The person is signed out and their profile disappears from search; nothing is deleted, and they receive only security e-mails.
+* To come back, they sign in as usual, are told the account is disabled, and ask for a **confirmation link by e-mail** (a wrong password in that request counts as a failed sign-in). A Google account is sent the link automatically when it signs in with Google. Opening the link switches the account back on. **An account that staff locked can never be re-enabled this way.**
+
+**Time zones.** Times on screen use the signed-in person's zone (otherwise the browser's). Times inside e-mails are written in the **recipient's own** zone, or the site's default (`Site.DefaultTimeZone`, Asia/Beirut at first), always with the offset, e.g. `2026-07-15 14:00 (UTC+04:00)`. Receipts are printed with the date the payment was received, which has no time of day.
+
+**Brand** (back office → *Brand*): the main, dark and accent colours and the logo. Colours must be `#rrggbb`; the page warns when white text on the main colour would be hard to read (below 4.5:1). On a dark page the public site automatically uses lighter shades of the brand colours. A logo replaces the site name in the header; pictures are stored as JPEG, so transparent areas turn white.
+
+**Receipts in Arabic.** The receipt page has its own **print language**: labels, the line description and the payment method are shown in the chosen language (the description is stored in both languages when the receipt is issued; names of people and ads are never translated). Your company name, address and footer are single texts: write them bilingually in Settings if you need both.
+
+**Home page.** Below the search box: *How it works*, *Why people use …* and a call to action for professionals. They are ordinary texts (`ui:` phrases), editable in **Texts**.
+
+## Booking rules, reminders and the API description (phase 4, part 2)
+
+**Availability is enforced.** A professional's weekly hours (Profile → availability) now decide when they can be booked: a request must fit **entirely inside one window**, judged in the **professional's own time zone** (their setting, else `Site.DefaultTimeZone`); it may not cross midnight; windows can belong to one listing or to all. A professional who has set **no** hours is treated as always open. Switch the rule off with the setting `Booking.EnforceAvailability`. A refused request says so (`OUTSIDE_AVAILABILITY`), and the profile page shows which time zone the hours are in.
+
+**Unanswered requests expire; approved appointments send reminders.** A background job (queued by the scheduler every quarter hour, safe to run on several servers: each row is claimed by one of them) cancels a **pending** request once its start time has passed (`Booking.ExpirePending`; the client is e-mailed with a link to choose another time) and e-mails **both people a reminder** `Booking.ReminderHours` (default 24, 0 = none) before an **approved** appointment, once, with the time in each person's own zone. Both are notification events people can switch off in Settings.
+
+**User details for support.** In the back office, *Users → Details* opens one person: account, private profile, listings with their hours, recent appointments and counts. It shows personal data, so **each opening is written to the audit log** (`users.view`).
+
+**Year view.** The dashboard's *Month by month* table shows, for any year with data, new users, appointments requested, reviews, contact messages and the receipts issued / amount received / voided, each column only for staff whose role may see that area. *Download as a spreadsheet (CSV)* gives the same table (UTF-8 with a byte-order mark so Excel reads it).
+
+**API description for the mobile app.** `docs/openapi.json` (OpenAPI 3.0.3) describes every public route: methods, path and query parameters, request bodies, who may call it, rate limits, the error shape, and the cross-site header a native app must send (`X-Requested-With`). It is **generated from the running route table** (no extra package) and a test fails if the API changes without regenerating it: run the tests once with `SAYSERNE_UPDATE_OPENAPI=1` and commit the result. The same document is served at `/api/openapi.json` when `OpenApi__Enabled=true`. **Limits:** response bodies are not typed (their shapes are the types in `web/src/api.ts`), and the back office's routes are left out on purpose. Generators such as `openapi-typescript` can read it; that has not been tried here.
+
+## Deployment
+
+See **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**: one guide for **Linux (systemd + nginx)** and **Windows (IIS)**, with ready-made files in `deploy/` (service unit, nginx and IIS configurations, a backup script), the first-run checklist, a security checklist, backup/restore, upgrades and troubleshooting. The configuration files are syntax-checked but have not been run on a real server.
+
+## Comparison with the original app
+
+**[docs/PARITY.md](docs/PARITY.md)** maps every original procedure and page to where it lives now, lists what was deliberately not carried over (and why), and what the original never finished.
+
 ## Configuration reference
 
 Deploy-time configuration only — **business rules are runtime settings in the back office** (see above). Values can be environment variables (`Section__Key`), user-secrets, or `appsettings.*.json` — but **secrets only via environment variables or user-secrets**. See `.env.example` for the full list.
@@ -411,14 +458,18 @@ dotnet test Sayserne.sln
 
 # Web
 cd web
+npm run lint       # catches hooks used in the wrong place (a mistake TypeScript cannot see)
 npm run build      # type-check + production build
-npm test           # api client + validation unit tests
+npm test           # api client, validation, page rendering and the "every phrase has an Arabic translation" checks
 
 # Back office
 cd ../admin
+npm run lint
 npm run build
 npm test
 ```
+
+**Browser journeys** (216 checks across ten scripts that drive the real site and back office in Chromium) are in `tests/e2e/`; see its README for how to run them. **API description:** `docs/openapi.json` is checked by a test; regenerate it with `SAYSERNE_UPDATE_OPENAPI=1 dotnet test` when the API changes on purpose.
 
 What the .NET suite covers: password hashing; input validation; Google ID-token validation (bad signature, wrong audience/issuer, expiry, nonce, `alg: none`, unknown key); the complete Google flow against an in-process fake Google that enforces the client secret and PKCE (new user, returning user, state mismatch, replay, unverified email, account linking with and without the password, explicit linking, locked accounts); registration/login/lockout/logout; CSRF and rate limiting; admin authorisation (anonymous 401, user 403, immediate effect of lock/role changes, last-admin protection); migrations (idempotent, tamper detection, repeatable redeploy, naming rules); the app account being refused direct table access; SQL-injection payloads treated as data; the architecture guard; **the configuration platform** — settings (types, limits, floors, consistency, public exposure, effect on password rules / lockout / rate limits / booking / chat / alerts / paging, propagation to a second instance, audit with old and new value), lookups (seed data, hierarchy, admin edits, deactivation, validation of profile values against them, default language protected), translations (languages, fallback, edit/reset), roles and permissions (exact access per role, immediate effect of changes, in-use roles protected), **two-factor sign-in** (password alone is no session, enrolment, replay refused — also at the database level under a 20-way race, recovery codes single use, lockout, forged pending cookie ignored, idle and absolute timeouts, cookie flags, separation of admin and website sessions, break-glass reset), the audit log (every change recorded, filters, append-only), and catalog management. Security-critical rules were mutation-tested: breaking each one makes a specific test fail.
 
@@ -434,8 +485,9 @@ CI (`.github/workflows/ci.yml`) runs both suites against a MySQL 8 service conta
 | 2 | Catalog, professional profiles/listings, availability, search, booking, reviews, chat, saved searches (+ web pages) | **done** |
 | 3a | Configuration platform: runtime settings, lookups, translated texts, audit log, roles & permissions, two-factor back-office sign-in, **separate admin app**, users, catalog; public web reads everything from the API | **done** |
 | 3b | **Done:** file storage (object storage ⇄ server disk, switchable), image/video processing and their screens, background jobs, **e-mail system** (provider settings, templates, verification, password reset, notifications and preferences). saved-search digests, **advertising**, **premium listings** (calendar batches, per-country limits, first-paid-keeps-its-days, visitor-place ranking), and **fees and manual payments with printable, consecutively numbered receipts** | done |
-| 3c | Contact messages, review moderation (professional replies, admin soft-delete) and chat monitoring (incl. deleted chats, highlighted admin interventions), dashboard (current year + year filter, CSV export), About / Contact / legal content, branding (logo, name, palettes) | not started |
-| 4 | Arabic + right-to-left screens, theme toggle and Settings page, image/video uploads in the screens, marketing sections, account disabling/re-enabling, per-user time zones and availability enforcement, final parity check, OpenAPI client | not started |
+| 3c | Contact messages, review moderation (professional replies, admin hide/restore) and chat monitoring (deleted chats, audited readings, highlighted team messages), dashboard (headline numbers, **month-by-month year view with CSV export**), About / Terms / Privacy content | **done** |
+| 4 | Arabic + right-to-left in both apps, e-mails and receipts; Settings page (language, time zone, theme, password, disable account); branding (colours, logo); marketing sections; per-user time zones; availability enforcement; appointment expiry and reminders; OpenAPI description; deployment guide; parity check (`docs/PARITY.md`) | **done** |
+| 5 | The mobile app (built on `docs/openapi.json`; push notifications) | not started |
 
 ## Differences from the original app (phase 2)
 

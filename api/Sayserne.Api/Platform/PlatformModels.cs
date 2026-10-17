@@ -21,10 +21,10 @@ public sealed record TwoFactorState(string SecretProtected, bool IsConfirmed, lo
 public sealed record AdminUserRow(UserRecord User, string? RoleNames, bool HasTwoFactor);
 public sealed record AdminUserDto(
     long Id, string Email, bool EmailVerified, string FirstName, string LastName, string Role, string ProfileType, bool IsLocked, DateTime CreatedAtUtc,
-    bool IsPremium, bool IsStarred, string? RoleNames, bool HasTwoFactor)
+    bool IsPremium, bool IsStarred, string? RoleNames, bool HasTwoFactor, bool IsDisabled = false)
 {
     public static AdminUserDto From(AdminUserRow r) => new(r.User.Id, r.User.Email, r.User.EmailVerified, r.User.FirstName, r.User.LastName, r.User.Role,
-        r.User.ProfileType, r.User.IsLocked, r.User.CreatedAtUtc, r.User.IsPremium, r.User.IsStarred, r.RoleNames, r.HasTwoFactor);
+        r.User.ProfileType, r.User.IsLocked, r.User.CreatedAtUtc, r.User.IsPremium, r.User.IsStarred, r.RoleNames, r.HasTwoFactor, r.User.IsDisabled);
 }
 
 internal static class PlatformMappers

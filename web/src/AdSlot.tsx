@@ -3,6 +3,7 @@ import { api, type ServedAd } from "./api";
 import { useConfig } from "./config";
 import { usePlace } from "./place";
 
+import { t } from "./texts";
 const SEEN_FOR_MS = 1000;
 
 /**
@@ -55,14 +56,14 @@ export function AdSlot({ position }: { position: "home_banner" | "search_banner"
 
   if (!current) return null;
   return (
-    <aside ref={box} className={`ad-slot ad-${position}`} aria-label="Advertisement" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)} onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
+    <aside ref={box} className={`ad-slot ad-${position}`} aria-label={t("Advertisement")} onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)} onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
       <a href={current.clickUrl} target="_blank" rel="noopener noreferrer sponsored" data-ad-id={current.id}>
         <img src={current.imageUrl} alt={current.title} loading="lazy" />
       </a>
-      <span className="ad-label">Ad</span>
+      <span className="ad-label">{t("Ad")}</span>
       {ads.length > 1 && (
-        <div className="ad-dots" role="group" aria-label="Choose an ad">
-          {ads.map((a, i) => <button key={a.id} type="button" className={i === index % ads.length ? "on" : ""} aria-label={`Ad ${i + 1} of ${ads.length}`} aria-current={i === index % ads.length} onClick={() => setIndex(i)} />)}
+        <div className="ad-dots" role="group" aria-label={t("Choose an ad")}>
+          {ads.map((a, i) => <button key={a.id} type="button" className={i === index % ads.length ? "on" : ""} aria-label={t("Ad {n} of {total}", { n: i + 1, total: ads.length })} aria-current={i === index % ads.length} onClick={() => setIndex(i)} />)}
         </div>
       )}
     </aside>

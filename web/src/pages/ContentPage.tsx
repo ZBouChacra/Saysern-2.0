@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import { getText } from "../texts";
+import { getText, t } from "../texts";
 
 /** Turns an admin-written page body into paragraphs, headings ("# ") and lists ("- "). Everything is rendered as text, never as HTML. */
 export function renderBody(body: string) {
@@ -21,7 +21,7 @@ export default function ContentPage({ page }: { page: "about" | "terms" | "priva
   return (
     <main className="card content-page">
       <h1>{title ?? ""}</h1>
-      {body ? renderBody(body) : <p className="muted">This page has no content yet.</p>}
+      {body ? renderBody(body) : <p className="muted">{t("This page has no content yet.")}</p>}
     </main>
   );
 }

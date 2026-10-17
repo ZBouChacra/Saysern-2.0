@@ -1,8 +1,8 @@
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { useEffect, useState, type ReactNode } from "react";
 import { api, errorMessage } from "./api";
-import { useConfig } from "./config";
-import { getText } from "./texts";
+import { useConfig, useLang } from "./config";
+import { t } from "./texts";
 import { PlacePicker } from "./place";
 import { useAuth } from "./auth";
 import Alerts from "./pages/Alerts";
@@ -10,6 +10,7 @@ import Appointments from "./pages/Appointments";
 import Book from "./pages/Book";
 import Chats from "./pages/Chats";
 import Contact from "./pages/Contact";
+import Reenable from "./pages/Reenable";
 import ContentPage from "./pages/ContentPage";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
@@ -23,6 +24,32 @@ import LinkGoogle from "./pages/LinkGoogle";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 
+/** Switches the whole site's language (texts, direction). For a signed-in person the choice is also saved to their account. */
+function LanguageSwitcher() {
+  const { lang, setLang, languages } = useLang();
+  const { user, setUser } = useAuth();
+  if (languages.length < 2) return null;
+  async function choose(code: string) {
+    if (user) { try { setUser(await api.updatePreferences(code, user.timeZone)); } catch { /* the choice still applies on this device */ } }
+    setLang(code);
+  }
+  return (
+    <label className="lang-switch"><span className="sr-only">{t("Language")}</span>
+      <select aria-label={t("Language")} value={lang} onChange={e => void choose(e.target.value)}>{languages.map(l => <option key={l.code} value={l.code}>{l.names[l.code] ?? l.names.en ?? l.code}</option>)}</select>
+    </label>
+  );
+}
+
+/** The site's name from Settings (the last capital letter starts the highlighted part: "Say" + "Serné"), or its logo when an admin uploaded one. */
+function Brand() {
+  const cfg = useConfig();
+  const name = cfg.str("Site.Name") || "SaySerné";
+  const logo = cfg.str("Brand.LogoUrl");
+  if (logo) return <img className="brand-logo" src={logo} alt={name} />;
+  const cut = name.search(/[A-Z](?![A-Z]*$)/) >= 0 ? name.search(/[A-Z](?=[^A-Z]*$)/) : -1;
+  return cut > 0 ? <>{name.slice(0, cut)}<span>{name.slice(cut)}</span></> : <>{name}</>;
+}
+
 function Header() {
   const { user, signOut } = useAuth();
   const [unread, setUnread] = useState(0);
@@ -35,24 +62,25 @@ function Header() {
   }, [user]);
   return (
     <header className="topbar">
-      <Link to="/" className="brand">Say<span>Serné</span></Link>
+      <Link to="/" className="brand"><Brand /></Link>
       <PlacePicker />
+      <LanguageSwitcher />
       <nav>
-        <Link to="/search">Search</Link>
+        <Link to="/search">{t("Search")}</Link>
         {user ? (
           <>
-            <Link to="/appointments">Appointments</Link>
-            <Link to="/chats">Chats{unread > 0 && <span className="badge">{unread}</span>}</Link>
-            <Link to="/alerts">Alerts</Link>
-            <Link to="/me">Profile</Link>
-            <Link to="/settings">Settings</Link>
+            <Link to="/appointments">{t("Appointments")}</Link>
+            <Link to="/chats">{t("Chats")}{unread > 0 && <span className="badge">{unread}</span>}</Link>
+            <Link to="/alerts">{t("Alerts")}</Link>
+            <Link to="/me">{t("Profile")}</Link>
+            <Link to="/settings">{t("Settings")}</Link>
             <span className="who">{user.firstName}</span>
-            <button className="link" onClick={() => void signOut()}>Sign out</button>
+            <button className="link" onClick={() => void signOut()}>{t("Sign out")}</button>
           </>
         ) : (
           <>
-            <Link to="/login">Sign in</Link>
-            <Link to="/register" className="cta">Create account</Link>
+            <Link to="/login">{t("Sign in")}</Link>
+            <Link to="/register" className="cta">{t("Create account")}</Link>
           </>
         )}
       </nav>
@@ -63,7 +91,7 @@ function Header() {
 /** UI guard only: the API enforces the same rule on every endpoint. */
 function RequireUser({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
-  if (loading) return <p className="muted">Loading…</p>;
+  if (loading) return <p className="muted">{t("Loading…")}</p>;
   if (!user) return <Navigate to="/login?error=login_required" replace />;
   return <>{children}</>;
 }
@@ -75,16 +103,16 @@ function VerifyBanner() {
   const [message, setMessage] = useState<string | null>(null);
   if (!user || user.emailVerified || !cfg.bool("Email.VerificationRequired")) return null;
   async function resend() {
-    try { const r = await api.resendVerification(); setMessage(r.alreadyVerified ? "Your address is already confirmed." : "We sent you a new link. Please check your inbox."); }
+    try { const r = await api.resendVerification(); setMessage(r.alreadyVerified ? t("Your address is already confirmed.") : t("We sent you a new link. Please check your inbox.")); }
     catch (e) { setMessage(errorMessage(e)); }
   }
-  return <div className="notice" role="status">Please confirm your email address to book appointments or send messages. <button className="link" onClick={() => void resend()}>Send me a new link</button>{message && <span> — {message}</span>}</div>;
+  return <div className="notice" role="status">{t("Please confirm your email address to book appointments or send messages.")}{" "}<button className="link" onClick={() => void resend()}>{t("Send me a new link")}</button>{message && <span> — {message}</span>}</div>;
 }
 
 function Footer() {
   return (
     <footer className="site-footer">
-      <nav aria-label="Footer"><Link to="/about">{getText("footer.about") ?? "About"}</Link><Link to="/terms">{getText("footer.terms") ?? "Terms"}</Link><Link to="/privacy">{getText("footer.privacy") ?? "Privacy"}</Link><Link to="/contact">{getText("footer.contact") ?? "Contact"}</Link></nav>
+      <nav aria-label={t("Footer")}><Link to="/about">{t("About")}</Link><Link to="/terms">{t("Terms")}</Link><Link to="/privacy">{t("Privacy")}</Link><Link to="/contact">{t("Contact")}</Link></nav>
     </footer>
   );
 }
@@ -106,6 +134,7 @@ export default function App() {
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/reenable" element={<Reenable />} />
         <Route path="/settings" element={<RequireUser><Settings /></RequireUser>} />
         <Route path="/search" element={<Search />} />
         <Route path="/professional/:id" element={<Professional />} />
@@ -115,7 +144,7 @@ export default function App() {
         <Route path="/chats/:roomId" element={<RequireUser><Chats /></RequireUser>} />
         <Route path="/alerts" element={<RequireUser><Alerts /></RequireUser>} />
         <Route path="/me" element={<RequireUser><MyProfile /></RequireUser>} />
-        <Route path="*" element={<main className="card"><h1>Page not found</h1><Link to="/">Go home</Link></main>} />
+        <Route path="*" element={<main className="card"><h1>{t("Page not found")}</h1><Link to="/">{t("Go home")}</Link></main>} />
       </Routes>
       <Footer />
     </>

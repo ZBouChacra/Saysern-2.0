@@ -3,6 +3,8 @@ import { Link, useSearchParams } from "react-router-dom";
 import { ApiError, api, errorMessage } from "../api";
 import { useConfig } from "../config";
 
+import { t } from "../texts";
+import { passwordHint } from "../i18n";
 export default function ResetPassword() {
   const [params] = useSearchParams();
   const token = params.get("token") ?? "";
@@ -21,17 +23,17 @@ export default function ResetPassword() {
     finally { setBusy(false); }
   }
 
-  if (done) return <main className="card narrow"><h1>Password changed</h1><p role="status">Your password was changed and any other sessions were signed out.</p><p><Link className="btn" to="/login">Sign in</Link></p></main>;
+  if (done) return <main className="card narrow"><h1>{t("Password changed")}</h1><p role="status">{t("Your password was changed and any other sessions were signed out.")}</p><p><Link className="btn" to="/login">{t("Sign in")}</Link></p></main>;
   return (
     <main className="card narrow">
-      <h1>Choose a new password</h1>
+      <h1>{t("Choose a new password")}</h1>
       <form onSubmit={submit} noValidate>
-        <label>New password<input type="password" autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} required /></label>
-        <p className="hint">At least {min} characters{cfg.bool("Auth.PasswordRequireLetter") && cfg.bool("Auth.PasswordRequireDigit") ? ", with a letter and a digit" : ""}.</p>
+        <label>{t("New password")}<input type="password" autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} required /></label>
+        <p className="hint">{passwordHint(min, cfg.bool("Auth.PasswordRequireLetter"), cfg.bool("Auth.PasswordRequireDigit"))}</p>
         {error && <p className="error" role="alert">{error}</p>}
-        <button className="btn" disabled={busy || !password}>{busy ? "Saving…" : "Change password"}</button>
+        <button className="btn" disabled={busy || !password}>{busy ? t("Saving…") : t("Change password")}</button>
       </form>
-      <p className="muted"><Link to="/forgot-password">Ask for a new link</Link></p>
+      <p className="muted"><Link to="/forgot-password">{t("Ask for a new link")}</Link></p>
     </main>
   );
 }

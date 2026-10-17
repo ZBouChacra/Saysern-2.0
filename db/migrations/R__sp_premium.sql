@@ -241,6 +241,7 @@ CREATE PROCEDURE sp_premium_batches_set_status(IN p_actor_id BIGINT UNSIGNED, IN
 BEGIN
   DECLARE v_current VARCHAR(10);
   DECLARE v_desc VARCHAR(400);
+  DECLARE v_desc_ar VARCHAR(400);
   DECLARE v_unit DECIMAL(10,2);
   DECLARE v_sub DECIMAL(12,2);
   DECLARE v_country VARCHAR(100);
@@ -272,7 +273,9 @@ BEGIN
   IF p_status = 'paid' THEN        -- the receipt is issued in the same transaction: if the days cannot be given below, it is rolled back and no number is used
     SELECT CONCAT('Premium listing: ', service_name, ' - ', professional_name, IFNULL(CONCAT(', ', city), ''), ' (', country_code, '), ', date_from, ' to ', date_to), fee_per_day, total_fee
       INTO v_desc, v_unit, v_sub FROM premium_batches WHERE id = p_id;
+    SELECT CONCAT('إدراج مميّز: ', service_name, ' - ', professional_name, IFNULL(CONCAT('، ', city), ''), ' (', country_code, ')، ', date_from, ' إلى ', date_to) INTO v_desc_ar FROM premium_batches WHERE id = p_id;
     CALL sp_payment_issue(p_actor_id, 'premium', NULL, p_id, v_desc, v_entitled, v_unit, v_sub, p_billed_to, p_billed_details, p_method, p_reference, p_received_on, p_notes);
+    UPDATE payments SET description_ar = v_desc_ar WHERE premium_batch_id = p_id AND status = 'issued';
   ELSEIF v_current = 'paid' THEN
     CALL sp_payment_void(p_actor_id, NULL, p_id);
   END IF;

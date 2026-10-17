@@ -10,7 +10,7 @@ public sealed record PaymentRow(long Id, string ReceiptNumber, string Kind, stri
     string? Reference, DateOnly ReceivedOn, string Status, DateTime IssuedAt);
 public sealed record Receipt(long Id, long Seq, string ReceiptNumber, string Kind, long? AdBatchId, long? PremiumBatchId, string Description, int Quantity, decimal UnitPrice, decimal Subtotal,
     decimal VatPercent, decimal VatAmount, decimal Total, string Currency, string BilledTo, string? BilledDetails, string Method, string? MethodName, string? Reference, DateOnly ReceivedOn,
-    string? Notes, string Status, string? VoidReason, DateTime? VoidedAt, DateTime IssuedAt, string CompanyName, string? CompanyAddress, string? CompanyTaxId, string? Footer);
+    string? Notes, string Status, string? VoidReason, DateTime? VoidedAt, DateTime IssuedAt, string CompanyName, string? CompanyAddress, string? CompanyTaxId, string? Footer, string? DescriptionAr = null, string? MethodNameAr = null);
 public sealed record PaymentSummaryRow(string Kind, string Method, long Receipts, decimal Subtotal, decimal Vat, decimal Total);
 public sealed record PaymentSummary(IReadOnlyList<PaymentSummaryRow> Rows, long Voided, decimal Total);
 
@@ -34,7 +34,8 @@ public sealed class PaymentRepository(IStoredProcedureExecutor db) : IPaymentRep
     private static Receipt Full(DbDataReader r) => new(r.Long("id"), r.Long("seq"), r.Str("receipt_number"), r.Str("kind"), r.LongOrNull("ad_batch_id"), r.LongOrNull("premium_batch_id"), r.Str("description"), r.Int("quantity"),
         M(r, "unit_price"), M(r, "subtotal"), M(r, "vat_percent"), M(r, "vat_amount"), M(r, "total"), r.Str("currency"), r.Str("billed_to"), r.StrOrNull("billed_details"), r.Str("method"), r.StrOrNull("method_name"),
         r.StrOrNull("reference"), D(r, "received_on"), r.StrOrNull("notes"), r.Str("status"), r.StrOrNull("void_reason"), r.UtcOrNull("voided_at"), r.Utc("issued_at"), r.Str("company_name"),
-        r.StrOrNull("company_address") is { Length: > 0 } a ? a : null, r.StrOrNull("company_tax_id") is { Length: > 0 } t ? t : null, r.StrOrNull("footer") is { Length: > 0 } f ? f : null);
+        r.StrOrNull("company_address") is { Length: > 0 } a ? a : null, r.StrOrNull("company_tax_id") is { Length: > 0 } t ? t : null, r.StrOrNull("footer") is { Length: > 0 } f ? f : null,
+        r.StrOrNull("description_ar"), r.StrOrNull("method_name_ar"));
 
     public async Task<PagedResult<PaymentRow>> ListAsync(string? status, string? kind, DateOnly? from, DateOnly? to, string? search, int page, int pageSize, CancellationToken ct = default)
     {

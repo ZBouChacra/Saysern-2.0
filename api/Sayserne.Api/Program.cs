@@ -74,6 +74,8 @@ namespace Sayserne.Api
             builder.Services.AddSingleton<IJobHandler, AdPurgeJobHandler>();
             builder.Services.AddSingleton<IDigestRepository, DigestRepository>();
             builder.Services.AddSingleton<IJobHandler, AlertDigestJobHandler>();
+            builder.Services.AddSingleton<IAppointmentMaintenanceRepository, AppointmentMaintenanceRepository>();
+            builder.Services.AddSingleton<IJobHandler, AppointmentMaintenanceJobHandler>();
             builder.Services.AddSingleton<DigestScheduler>();
             if (builder.Configuration.GetValue<bool?>("Jobs:SchedulerEnabled") ?? true) builder.Services.AddHostedService(sp => sp.GetRequiredService<DigestScheduler>());
             builder.Services.AddHostedService<SettingsRefresher>();
@@ -204,6 +206,10 @@ namespace Sayserne.Api
             app.MapModeration();
             app.MapContact();
             app.MapDashboard();
+            app.MapAccount();
+            // The API description is generated from the live route table. Off unless OpenApi:Enabled=true (it is documentation, not something every visitor needs).
+            if (app.Configuration.GetValue<bool>("OpenApi:Enabled"))
+                app.MapGet("/api/openapi.json", (EndpointDataSource routes) => Results.Text(Sayserne.Api.OpenApi.OpenApiBuilder.Serialize(Sayserne.Api.OpenApi.OpenApiBuilder.Build(routes)), "application/json; charset=utf-8"));
             app.MapMarketplace();
             app.MapPublicConfig();
             app.MapFiles();

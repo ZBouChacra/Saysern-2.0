@@ -4,6 +4,7 @@ import { api, errorMessage, type BusySlot, type ProfessionalPage } from "../api"
 import { useConfig, useLookup } from "../config";
 import { fullName, when } from "../components";
 
+import { t } from "../texts";
 export default function Book() {
   const { id } = useParams();
   const proId = Number(id);
@@ -42,31 +43,29 @@ export default function Book() {
     } catch (err) { setError(errorMessage(err)); setSending(false); api.busy(proId).then(setBusy).catch(() => undefined); }
   }
 
-  if (!page) return <main className="card"><p className="muted">{error ?? "Loading…"}</p></main>;
+  if (!page) return <main className="card"><p className="muted">{error ?? t("Loading…")}</p></main>;
   return (
     <main className="card narrow">
-      <h1>Book {fullName(page.profile.firstName, page.profile.lastName)}</h1>
+      <h1>{t("Book {fullName}", { fullName: fullName(page.profile.firstName, page.profile.lastName) })}</h1>
       <form onSubmit={submit} noValidate>
         {page.professions.length > 1 && (
-          <label>Service
-            <select value={professionId ?? ""} onChange={e => setProfessionId(Number(e.target.value))}>{page.professions.map(p => <option key={p.id} value={p.id}>{p.serviceName}</option>)}</select></label>
+          <label>{t("Service")}<select value={professionId ?? ""} onChange={e => setProfessionId(Number(e.target.value))}>{page.professions.map(p => <option key={p.id} value={p.id}>{p.serviceName}</option>)}</select></label>
         )}
-        <label>Date and time<input type="datetime-local" value={start} onChange={e => setStart(e.target.value)} required /></label>
-        <label>Duration
-          <select value={duration} onChange={e => setDuration(Number(e.target.value))}>{durations.map(d => <option key={d.code} value={Number(d.code)}>{durationName(d)}</option>)}</select></label>
-        <label>What do you need? (optional)<input value={note} onChange={e => setNote(e.target.value)} maxLength={cfg.num("Booking.MaxDescriptionLength")} /></label>
-        {clash && <p className="error" role="alert">That time overlaps an existing booking.</p>}
+        <label>{t("Date and time")}<input type="datetime-local" value={start} onChange={e => setStart(e.target.value)} required /></label>
+        <label>{t("Duration")}<select value={duration} onChange={e => setDuration(Number(e.target.value))}>{durations.map(d => <option key={d.code} value={Number(d.code)}>{durationName(d)}</option>)}</select></label>
+        <label>{t("What do you need? (optional)")}<input value={note} onChange={e => setNote(e.target.value)} maxLength={cfg.num("Booking.MaxDescriptionLength")} /></label>
+        {clash && <p className="error" role="alert">{t("That time overlaps an existing booking.")}</p>}
         {error && <p className="error" role="alert">{error}</p>}
-        <button className="btn" disabled={sending || !start || clash}>{sending ? "Requesting…" : "Request appointment"}</button>
-        <p className="hint">The professional must approve your request. Times are shown in your local time zone.</p>
+        <button className="btn" disabled={sending || !start || clash}>{sending ? t("Requesting…") : t("Request appointment")}</button>
+        <p className="hint">{t("The professional must approve your request. Times are shown in your local time zone.")}</p>
       </form>
       {busy.length > 0 && (
         <>
-          <h3>Already booked</h3>
+          <h3>{t("Already booked")}</h3>
           <ul className="plain">{busy.slice(0, 12).map(b => <li key={b.startsAt} className="muted">{when(b.startsAt)} → {new Date(b.endsAt).toLocaleTimeString([], { timeStyle: "short" })}</li>)}</ul>
         </>
       )}
-      <p><Link to={`/professional/${proId}`}>Back to profile</Link></p>
+      <p><Link to={`/professional/${proId}`}>{t("Back to profile")}</Link></p>
     </main>
   );
 }

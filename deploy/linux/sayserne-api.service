@@ -1,0 +1,27 @@
+# /etc/systemd/system/sayserne-api.service   (then: sudo systemctl daemon-reload && sudo systemctl enable --now sayserne-api)
+[Unit]
+Description=SaySerne API
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+WorkingDirectory=/opt/sayserne/api
+ExecStart=/usr/bin/dotnet /opt/sayserne/api/Sayserne.Api.dll --urls http://127.0.0.1:5080
+Restart=always
+RestartSec=5
+User=sayserne
+Group=sayserne
+# Secrets and settings live in a file only root and the service can read (see deploy/env.example). Never in this unit file.
+EnvironmentFile=/etc/sayserne/api.env
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
+# Reasonable hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/sayserne
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

@@ -5,6 +5,8 @@ import { GENERIC_ERROR, NETWORK_ERROR, getText } from "./texts";
 export type Role = "user" | "admin";
 
 export interface User {
+  preferredLanguage?: string;
+  timeZone?: string;
   id: number;
   email: string;
   emailVerified: boolean;
@@ -94,7 +96,7 @@ export type ProfileInput = Omit<PrivateProfile, "id" | "email" | "emailVerified"
 
 export interface PublicProfile {
   id: number; firstName: string; lastName: string; sex?: string; nationality?: string; country?: string; city?: string;
-  profilePhoto?: string; bannerPhoto?: string; bio?: string; portfolio?: string; age?: number; isPremium: boolean; isStarred: boolean;
+  profilePhoto?: string; bannerPhoto?: string; bio?: string; portfolio?: string; age?: number; isPremium: boolean; isStarred: boolean; timeZone?: string;
 }
 
 export interface Profession {
@@ -203,6 +205,11 @@ export const api = {
   fileStatus: (id: string) => request<FileStatus>("GET", `/files/${id}/status`),
   /** The public contact form. `website` is a hidden trap field that real people never fill in. */
   contact: (b: { name: string; email: string; topic?: string; subject: string; message: string; language?: string; website?: string }) => request<{ received: boolean }>("POST", "/contact", b),
+  updatePreferences: (language: string, timeZone?: string) => request<{ user: User }>("PUT", "/me/preferences", { language, timeZone: timeZone ?? "" }).then(r => r.user),
+  changePassword: (currentPassword: string, newPassword: string) => request<{ user: User }>("POST", "/me/password", { currentPassword, newPassword }).then(r => r.user),
+  disableAccount: (b: { password?: string; confirmEmail?: string }) => request<void>("POST", "/me/disable", b),
+  reenableRequest: (email: string, password: string) => request<{ accepted: boolean }>("POST", "/auth/reenable/request", { email, password }),
+  reenableConfirm: (token: string) => request<{ reenabled: boolean }>("POST", "/auth/reenable/confirm", { token }),
   replyToReview: (id: number, text: string) => request<ReviewItem>("PUT", `/reviews/${id}/reply`, { text }),
   deleteMessage: (roomId: number, messageId: number) => request<void>("DELETE", `/chat/rooms/${roomId}/messages/${messageId}`),
   deleteRoom: (roomId: number) => request<void>("DELETE", `/chat/rooms/${roomId}`),

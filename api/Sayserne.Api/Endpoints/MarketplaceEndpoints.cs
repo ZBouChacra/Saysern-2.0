@@ -105,9 +105,15 @@ public static class MarketplaceEndpoints
     {
         var g = app.MapGroup("/api/appointments").RequireAuthorization().RequireRateLimiting(WriteLimiter);
 
-        g.MapPost("", async (HttpContext ctx, BookingInput input, IBookingRepository bookings, ISettingsService settings, MarketplaceNotifier notify) =>
+        g.MapPost("", async (HttpContext ctx, BookingInput input, IBookingRepository bookings, IProfessionalRepository profiles, IUserRepository users, ISettingsService settings, MarketplaceNotifier notify) =>
         {
             var (start, duration, description) = MarketplaceValidation.ValidateBooking(input, settings);
+            if (settings.GetBool("Booking.EnforceAvailability"))      // judged in the professional's own time zone; no hours set = always open
+            {
+                var professional = await users.GetByIdAsync(input.ProfessionalId!.Value);
+                var slots = await profiles.GetAvailabilityAsync(input.ProfessionalId!.Value);
+                if (!AvailabilityRules.Allows(slots, input.ProfessionId, start, duration, professional?.TimeZone, settings.GetString("Site.DefaultTimeZone"))) throw new AppException("OUTSIDE_AVAILABILITY", 409);
+            }
             var created = await bookings.CreateAppointmentAsync(ctx.UserId(), input.ProfessionalId!.Value, input.ProfessionId, start, duration, description);
             await notify.BookingRequested(created);
             return Results.Json(created, statusCode: StatusCodes.Status201Created);

@@ -52,7 +52,7 @@ public class NotificationTests
         await s.Pro.PostAsync($"/api/appointments/{id}/status", new { status = "approved" });       // 2. the client hears it was approved (in English)
         var approved = Assert.Single(await NewMailFor(s.Site, s.ClientEmail));
         Assert.Equal("Your appointment with Pia Pro is confirmed", approved.Subject);
-        Assert.Matches(@"\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC", approved.Text);
+        Assert.Matches(@"\d{4}-\d{2}-\d{2} \d{2}:\d{2} \(UTC[+-]\d{2}:\d{2}\)", approved.Text);
         Assert.Empty(await NewMailFor(s.Site, s.ProEmail)); await ClearMail(s.Site);
 
         await s.Client.PostAsync($"/api/appointments/{id}/status", new { status = "cancelled" });   // 3. the client cancels: the PROFESSIONAL is told

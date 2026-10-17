@@ -12,6 +12,9 @@ public interface IUserRepository
     Task RecordLoginFailureAsync(long id, int maxAttempts, int lockMinutes, CancellationToken ct = default);
     Task RecordLoginSuccessAsync(long id, CancellationToken ct = default);
     Task PingAsync(CancellationToken ct = default);
+    Task<UserRecord> UpdatePreferencesAsync(long userId, string language, string? timeZone, CancellationToken ct = default);
+    Task<UserRecord> ChangePasswordAsync(long userId, string passwordHash, CancellationToken ct = default);
+    Task<UserRecord> SetDisabledAsync(long userId, bool disabled, CancellationToken ct = default);
 }
 
 public interface IIdentityRepository
@@ -50,6 +53,15 @@ public sealed class UserRepository(IStoredProcedureExecutor db) : IUserRepositor
         db.ExecuteAsync("sp_users_record_login_success", new ProcParams().Add("p_id", id), ct);
 
     public Task PingAsync(CancellationToken ct = default) => db.ExecuteAsync("sp_health_ping", null, ct);
+
+    public async Task<UserRecord> UpdatePreferencesAsync(long userId, string language, string? timeZone, CancellationToken ct = default) =>
+        (await db.QuerySingleOrDefaultAsync("sp_users_update_preferences", new ProcParams().Add("p_user_id", userId).Add("p_language", language).Add("p_time_zone", timeZone), Mappers.User, ct))!;
+
+    public async Task<UserRecord> ChangePasswordAsync(long userId, string passwordHash, CancellationToken ct = default) =>
+        (await db.QuerySingleOrDefaultAsync("sp_users_change_password", new ProcParams().Add("p_user_id", userId).Add("p_password_hash", passwordHash), Mappers.User, ct))!;
+
+    public async Task<UserRecord> SetDisabledAsync(long userId, bool disabled, CancellationToken ct = default) =>
+        (await db.QuerySingleOrDefaultAsync("sp_users_set_disabled", new ProcParams().Add("p_user_id", userId).Add("p_disabled", disabled), Mappers.User, ct))!;
 }
 
 public sealed class IdentityRepository(IStoredProcedureExecutor db) : IIdentityRepository

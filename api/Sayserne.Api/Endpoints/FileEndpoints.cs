@@ -19,6 +19,7 @@ public static class FileEndpoints
         ["banner_photo"] = new(Image: true, Video: false, NeedsRoom: false, Public: true),
         ["chat_media"] = new(Image: true, Video: true, NeedsRoom: true, Public: false),
         ["ad_image"] = new(Image: true, Video: false, NeedsRoom: false, Public: true, StaffOnly: true),   // uploaded through the back office only
+        ["brand_logo"] = new(Image: true, Video: false, NeedsRoom: false, Public: true, StaffOnly: true),
     };
 
     private static string Url(string id) => $"/api/files/{id}";

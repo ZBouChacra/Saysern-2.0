@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, errorMessage, type LookupType, type LookupValue } from "../api";
 
+import { t } from "../texts";
 interface Draft { code: string; isNew: boolean; parentCode: string; sortOrder: string; isActive: boolean; metadata: string; names: Record<string, string> }
 
 export default function Lookups() {
@@ -24,7 +25,7 @@ export default function Lookups() {
   }, [type]);
   useEffect(() => { if (type?.parentType && parent) api.lookupValues(type.code, parent).then(setValues).catch(e => setError(errorMessage(e))); }, [type, parent]);
 
-  const lang = (v: LookupValue) => v.names.en ?? v.code;
+  const lang = (v: LookupValue) => v.names[document.documentElement.lang] ?? v.names.en ?? v.code;
   const shown = useMemo(() => values.filter(v => !filter || `${v.code} ${Object.values(v.names).join(" ")}`.toLowerCase().includes(filter.toLowerCase())), [values, filter]);
 
   function edit(v?: LookupValue) {
@@ -35,7 +36,7 @@ export default function Lookups() {
   async function save() {
     if (!type || !draft) return;
     let metadata: unknown;
-    if (draft.metadata.trim()) { try { metadata = JSON.parse(draft.metadata); } catch { setError("Metadata must be valid JSON."); return; } }
+    if (draft.metadata.trim()) { try { metadata = JSON.parse(draft.metadata); } catch { setError(t("Metadata must be valid JSON.")); return; } }
     const names = Object.fromEntries(Object.entries(draft.names).filter(([, n]) => n.trim()));
     try {
       const saved = await api.saveLookupValue(type.code, draft.code.trim(), { parentCode: type.parentType ? draft.parentCode : undefined, sortOrder: Number(draft.sortOrder) || 0, isActive: draft.isActive, metadata, names });
@@ -51,29 +52,29 @@ export default function Lookups() {
 
   return (
     <main className="card full">
-      <div className="row spread"><h1>Lookups</h1><button className="btn secondary" onClick={() => void newType()}>New lookup type</button></div>
-      <p className="muted">Every list the site offers (countries, cities, nationalities, durations, statuses…). Values are never deleted, only switched off, so existing data keeps its meaning.</p>
+      <div className="row spread"><h1>{t("Lookups")}</h1><button className="btn secondary" onClick={() => void newType()}>{t("New lookup type")}</button></div>
+      <p className="muted">{t("Every list the site offers (countries, cities, nationalities, durations, statuses…). Values are never deleted, only switched off, so existing data keeps its meaning.")}</p>
       {error && !draft && <p className="error" role="alert">{error}</p>}
       <div className="two">
-        <nav aria-label="Lookup types">{types.map(t => (
+        <nav aria-label={t("Lookup types")}>{types.map(t => (
           <button key={t.code} className={`room ${type?.code === t.code ? "active" : ""}`} onClick={() => setType(t)}><b>{t.name}</b> <span className="muted small">({t.valueCount})</span></button>
         ))}</nav>
         <section>
-          {!type ? <p className="muted">Choose a lookup.</p> : (
+          {!type ? <p className="muted">{t("Choose a lookup.")}</p> : (
             <>
               <h2>{type.name}</h2><p className="muted small">{type.description}</p>
               <div className="toolbar">
-                {type.parentType && <select aria-label="Parent" value={parent} onChange={e => setParent(e.target.value)}><option value="">Choose {type.parentType}…</option>{parents.map(p => <option key={p.code} value={p.code}>{lang(p)}</option>)}</select>}
-                <input placeholder="Filter" aria-label="Filter values" value={filter} onChange={e => setFilter(e.target.value)} />
-                <button className="btn" disabled={!!type.parentType && !parent} onClick={() => edit()}>Add value</button>
+                {type.parentType && <select aria-label={t("Parent")} value={parent} onChange={e => setParent(e.target.value)}><option value="">{t("Choose {parentType}…", { parentType: type.parentType })}</option>{parents.map(p => <option key={p.code} value={p.code}>{lang(p)}</option>)}</select>}
+                <input placeholder={t("Filter")} aria-label={t("Filter values")} value={filter} onChange={e => setFilter(e.target.value)} />
+                <button className="btn" disabled={!!type.parentType && !parent} onClick={() => edit()}>{t("Add value")}</button>
               </div>
-              {type.parentType && !parent ? <p className="muted">Choose a {type.parentType} to see and add its values.</p> : (
-                <div className="table-wrap"><table className="t"><thead><tr><th>Code</th>{languages.map(l => <th key={l.code}>{l.names.en ?? l.code}</th>)}<th>Order</th><th>Active</th><th /></tr></thead><tbody>
+              {type.parentType && !parent ? <p className="muted">{t("Choose a {parentType} to see and add its values.", { parentType: type.parentType })}</p> : (
+                <div className="table-wrap"><table className="t"><thead><tr><th>{t("Code")}</th>{languages.map(l => <th key={l.code}>{l.names.en ?? l.code}</th>)}<th>{t("Order")}</th><th>{t("Active")}</th><th /></tr></thead><tbody>
                   {shown.map(v => (
                     <tr key={v.code}><td><code>{v.code}</code></td>{languages.map(l => <td key={l.code} dir={l.code === "ar" ? "rtl" : "ltr"}>{v.names[l.code] ?? <span className="muted">—</span>}</td>)}
-                      <td>{v.sortOrder}</td><td>{v.isActive ? "yes" : <span className="pill bad">off</span>}</td><td><button className="btn small secondary" onClick={() => edit(v)}>Edit</button></td></tr>
+                      <td>{v.sortOrder}</td><td>{v.isActive ? "yes" : <span className="pill bad">{t("off")}</span>}</td><td><button className="btn small secondary" onClick={() => edit(v)}>{t("Edit")}</button></td></tr>
                   ))}
-                  {shown.length === 0 && <tr><td colSpan={languages.length + 4} className="muted">No values.</td></tr>}
+                  {shown.length === 0 && <tr><td colSpan={languages.length + 4} className="muted">{t("No values.")}</td></tr>}
                 </tbody></table></div>
               )}
             </>
@@ -81,15 +82,15 @@ export default function Lookups() {
         </section>
       </div>
       {draft && type && (
-        <div className="modal" role="dialog" aria-label="Lookup value"><div>
-          <h2>{draft.isNew ? "Add" : "Edit"} {type.name.toLowerCase()}</h2>
-          <label>Code<input value={draft.code} disabled={!draft.isNew} onChange={e => setDraft({ ...draft, code: e.target.value })} /></label>
-          {languages.map(l => <label key={l.code}>Name ({l.names.en ?? l.code}){l.code === "en" ? " *" : ""}<input dir={l.code === "ar" ? "rtl" : "ltr"} value={draft.names[l.code] ?? ""} onChange={e => setDraft({ ...draft, names: { ...draft.names, [l.code]: e.target.value } })} /></label>)}
-          <div className="grid2"><label>Order<input type="number" value={draft.sortOrder} onChange={e => setDraft({ ...draft, sortOrder: e.target.value })} /></label>
-            <label className="chk"><input type="checkbox" checked={draft.isActive} onChange={e => setDraft({ ...draft, isActive: e.target.checked })} /> Active (offered to visitors)</label></div>
-          <label>Metadata (JSON, optional)<textarea rows={3} value={draft.metadata} onChange={e => setDraft({ ...draft, metadata: e.target.value })} /></label>
+        <div className="modal" role="dialog" aria-label={t("Lookup value")}><div>
+          <h2>{draft.isNew ? t("Add") : t("Edit")} {type.name.toLowerCase()}</h2>
+          <label>{t("Code")}<input value={draft.code} disabled={!draft.isNew} onChange={e => setDraft({ ...draft, code: e.target.value })} /></label>
+          {languages.map(l => <label key={l.code}>{t("Name ({language})", { language: l.names.en ?? l.code })}{l.code === "en" ? " *" : ""}<input dir={l.code === "ar" ? "rtl" : "ltr"} value={draft.names[l.code] ?? ""} onChange={e => setDraft({ ...draft, names: { ...draft.names, [l.code]: e.target.value } })} /></label>)}
+          <div className="grid2"><label>{t("Order")}<input type="number" value={draft.sortOrder} onChange={e => setDraft({ ...draft, sortOrder: e.target.value })} /></label>
+            <label className="chk"><input type="checkbox" checked={draft.isActive} onChange={e => setDraft({ ...draft, isActive: e.target.checked })} />{" "}{t("Active (offered to visitors)")}</label></div>
+          <label>{t("Metadata (JSON, optional)")}<textarea rows={3} value={draft.metadata} onChange={e => setDraft({ ...draft, metadata: e.target.value })} /></label>
           {error && <p className="error" role="alert">{error}</p>}
-          <div className="row"><button className="btn" onClick={() => void save()}>Save</button><button className="btn secondary" onClick={() => setDraft(null)}>Cancel</button></div>
+          <div className="row"><button className="btn" onClick={() => void save()}>{t("Save")}</button><button className="btn secondary" onClick={() => setDraft(null)}>{t("Cancel")}</button></div>
         </div></div>
       )}
     </main>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, errorMessage, type BillingInput, type LookupValue } from "../api";
 
+import { t } from "../texts";
 const today = () => new Date().toISOString().slice(0, 10);
 
 /**
@@ -21,19 +22,19 @@ export default function PaymentForm({ title, defaultBilledTo, amount, onSubmit, 
   }
 
   return (
-    <section className="card" aria-label="Record payment">
-      <h3>Record payment: {title}</h3>
-      <p className="muted small">Amount: <b>{amount.toFixed(2)} USD</b> (VAT, if you charge it, is added as set in Settings → Billing). This marks the booking paid and issues the receipt.</p>
+    <section className="card" aria-label={t("Record payment")}>
+      <h3>{t("Record payment: {title}", { title })}</h3>
+      <p className="muted small">{t("Amount:")}{" "}<b>{t("{toFixed} USD", { toFixed: amount.toFixed(2) })}</b>{" "}{t("(VAT, if you charge it, is added as set in Settings → Billing). This marks the booking paid and issues the receipt.")}</p>
       {error && <p className="error" role="alert">{error}</p>}
-      <label>Receipt made out to<input value={f.billedTo} maxLength={200} onChange={e => setF({ ...f, billedTo: e.target.value })} /></label>
-      <label>Address / tax number (optional)<textarea rows={2} maxLength={500} value={f.billedDetails} onChange={e => setF({ ...f, billedDetails: e.target.value })} /></label>
+      <label>{t("Receipt made out to")}<input value={f.billedTo} maxLength={200} onChange={e => setF({ ...f, billedTo: e.target.value })} /></label>
+      <label>{t("Address / tax number (optional)")}<textarea rows={2} maxLength={500} value={f.billedDetails} onChange={e => setF({ ...f, billedDetails: e.target.value })} /></label>
       <div className="row">
-        <label>How was it paid?<select value={f.method} onChange={e => setF({ ...f, method: e.target.value })}>{methods.map(m => <option key={m.code} value={m.code}>{m.names.en ?? m.code}</option>)}</select></label>
-        <label>Reference (optional)<input value={f.reference} maxLength={100} onChange={e => setF({ ...f, reference: e.target.value })} /></label>
-        <label>Received on<input type="date" max={today()} value={f.receivedOn} onChange={e => setF({ ...f, receivedOn: e.target.value })} /></label>
+        <label>{t("How was it paid?")}<select value={f.method} onChange={e => setF({ ...f, method: e.target.value })}>{methods.map(m => <option key={m.code} value={m.code}>{m.names[document.documentElement.lang] ?? m.names.en ?? m.code}</option>)}</select></label>
+        <label>{t("Reference (optional)")}<input value={f.reference} maxLength={100} onChange={e => setF({ ...f, reference: e.target.value })} /></label>
+        <label>{t("Received on")}<input type="date" max={today()} value={f.receivedOn} onChange={e => setF({ ...f, receivedOn: e.target.value })} /></label>
       </div>
-      <label>Notes (optional)<input value={f.notes} maxLength={500} onChange={e => setF({ ...f, notes: e.target.value })} /></label>
-      <div className="row"><button className="btn" disabled={busy || !f.billedTo.trim() || !f.method} onClick={() => void submit()}>{busy ? "Recording…" : "Record payment and issue receipt"}</button><button className="btn secondary" disabled={busy} onClick={onCancel}>Cancel</button></div>
+      <label>{t("Notes (optional)")}<input value={f.notes} maxLength={500} onChange={e => setF({ ...f, notes: e.target.value })} /></label>
+      <div className="row"><button className="btn" disabled={busy || !f.billedTo.trim() || !f.method} onClick={() => void submit()}>{busy ? t("Recording…") : t("Record payment and issue receipt")}</button><button className="btn secondary" disabled={busy} onClick={onCancel}>{t("Cancel")}</button></div>
     </section>
   );
 }

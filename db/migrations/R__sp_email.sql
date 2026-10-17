@@ -89,10 +89,10 @@ END$$
 -- (so nobody can be mail-bombed by someone registering with their address).
 CREATE PROCEDURE sp_notify_prepare(IN p_user_id BIGINT UNSIGNED, IN p_event VARCHAR(60), IN p_channel VARCHAR(20))
 BEGIN
-  SELECT u.id, u.email, u.first_name, u.preferred_language,
+  SELECT u.id, u.email, u.first_name, u.preferred_language, u.time_zone,
          (ev.id IS NOT NULL AND ch.id IS NOT NULL AND u.is_locked = 0
           AND (IFNULL(JSON_EXTRACT(ev.metadata, '$.mandatory') = TRUE, 0) = 1
-               OR (u.email_verified = 1 AND IFNULL((SELECT np.enabled FROM notification_preferences np WHERE np.user_id = u.id AND np.event_code = p_event AND np.channel = p_channel), 1) = 1))) AS enabled
+               OR (u.is_disabled = 0 AND u.email_verified = 1 AND IFNULL((SELECT np.enabled FROM notification_preferences np WHERE np.user_id = u.id AND np.event_code = p_event AND np.channel = p_channel), 1) = 1))) AS enabled
   FROM users u
   LEFT JOIN lookup_values ev ON ev.type_code = 'notification_event'   AND ev.code = p_event   AND ev.is_active = 1
   LEFT JOIN lookup_values ch ON ch.type_code = 'notification_channel' AND ch.code = p_channel AND ch.is_active = 1

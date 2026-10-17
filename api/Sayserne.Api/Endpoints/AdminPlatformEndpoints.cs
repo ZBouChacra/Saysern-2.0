@@ -3,6 +3,7 @@ using Sayserne.Api.Auth;
 using Sayserne.Api.Data;
 using Sayserne.Api.Email;
 using Sayserne.Api.Jobs;
+using Sayserne.Api.Media;
 using Sayserne.Api.Platform;
 
 namespace Sayserne.Api.Endpoints;
@@ -35,6 +36,9 @@ public static class AdminPlatformEndpoints
             await settings.RefreshAsync();   // takes effect on this instance immediately, on others within the refresh interval
             return Results.Ok(row);
         }).RequirePermission("settings.manage");
+        // The logo: the same upload checks as every picture (type by its bytes, shrunk, metadata removed). Choosing it is then an ordinary setting (Brand.LogoFileId).
+        g.MapPost("/brand/logo", (HttpContext ctx, IFileRepository files, IStorageRouter storage, MediaIngestService ingest, IJobQueue jobs, ISettingsService settings, TimeProvider clock) =>
+            FileEndpoints.UploadCore(ctx, "brand_logo", null, files, storage, ingest, jobs, settings, clock, allowStaffOnly: true)).RequirePermission("settings.manage");
         g.MapPost("/settings/{key}/reset", async (HttpContext ctx, string key, IPlatformRepository platform, ISettingsService settings) =>
         {
             var row = await platform.ResetSettingAsync(ctx.UserId(), key);

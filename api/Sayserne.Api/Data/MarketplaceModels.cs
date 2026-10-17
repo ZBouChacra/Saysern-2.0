@@ -17,7 +17,7 @@ public sealed record PrivateProfile(
 /// <summary>What anyone sees: no email, phone or date of birth.</summary>
 public sealed record PublicProfile(
     long Id, string FirstName, string LastName, string? Sex, string? Nationality, string? Country, string? City,
-    string? ProfilePhoto, string? BannerPhoto, string? Bio, string? Portfolio, int? Age, bool IsPremium, bool IsStarred);
+    string? ProfilePhoto, string? BannerPhoto, string? Bio, string? Portfolio, int? Age, bool IsPremium, bool IsStarred, string? TimeZone = null);
 
 public sealed record Profession(
     long Id, long UserId, long CategoryId, long ServiceId, string CategoryName, string? CategoryNameAr, string ServiceName, string? ServiceNameAr,
@@ -81,7 +81,7 @@ internal static class MarketplaceMappers
     public static PublicProfile PublicProfile(DbDataReader r) => new(
         r.Long("id"), r.Str("first_name"), r.Str("last_name"), r.StrOrNull("sex"), r.StrOrNull("nationality"), r.StrOrNull("country"), r.StrOrNull("city"),
         r.StrOrNull("profile_photo"), r.StrOrNull("banner_photo"), r.StrOrNull("bio"), r.StrOrNull("portfolio"), r.IntOrNull("age"),
-        r.Bool("is_premium"), r.Bool("is_starred"));
+        r.Bool("is_premium"), r.Bool("is_starred"), r.StrOrNull("time_zone"));
 
     public static Profession Profession(DbDataReader r) => new(
         r.Long("id"), r.Long("user_id"), r.Long("category_id"), r.Long("service_id"), r.Str("category_name"), r.StrOrNull("category_name_ar"),

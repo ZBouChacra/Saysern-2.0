@@ -148,6 +148,16 @@ BEGIN
   IF p_key = 'Email.SmtpSecurity' AND NOT EXISTS (SELECT 1 FROM lookup_values WHERE type_code = 'smtp_security' AND code = v_value AND is_active = 1) THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'SETTING_INVALID';
   END IF;
+  IF p_key LIKE 'Brand.%Color' AND v_value NOT REGEXP '^#[0-9a-fA-F]{6}$' THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'SETTING_INVALID';
+  END IF;
+  IF p_key = 'Brand.LogoFileId' AND CHAR_LENGTH(v_value) > 0
+     AND NOT EXISTS (SELECT 1 FROM files WHERE id = v_value AND purpose = 'brand_logo' AND status = 'ready' AND is_deleted = 0) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'SETTING_INVALID';
+  END IF;
+  IF p_key = 'Contact.NotifyAddress' AND CHAR_LENGTH(v_value) > 0 AND v_value NOT REGEXP '^[^@ ]+@[^@ ]+\\.[^@ ]+$' THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'SETTING_INVALID';
+  END IF;
   IF p_key = 'Email.FromAddress' AND v_value NOT REGEXP '^[^@ ]+@[^@ ]+$' THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'SETTING_INVALID';
   END IF;

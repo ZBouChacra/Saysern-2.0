@@ -84,7 +84,7 @@ public static class GoogleEndpoints
     private static async Task<IResult> Callback(
         HttpContext ctx, IOptions<GoogleOptions> options, ProtectedCookies cookies, IGoogleIdTokenValidator validator,
         IHttpClientFactory httpFactory, IUserRepository users, IIdentityRepository identities, TimeProvider clock,
-        ILoggerFactory loggerFactory, string? code, string? state, string? error)
+        ILoggerFactory loggerFactory, Sayserne.Api.Email.AccountEmails emails, string? code, string? state, string? error)
     {
         var log = loggerFactory.CreateLogger("Sayserne.Google");
         var o = options.Value;
@@ -133,6 +133,11 @@ public static class GoogleEndpoints
         if (existing != null)
         {
             if (existing.IsLocked || existing.IsTemporarilyLocked(now)) return Fail("account_locked");
+            if (existing.IsDisabled)             // signed in with Google, now confirm by e-mail to switch the account back on
+            {
+                try { await emails.SendReenableAsync(existing); } catch (AppException) { /* silently limited */ }
+                return Fail("account_disabled");
+            }
             await users.RecordLoginSuccessAsync(existing.Id);
             await AuthSession.SignInAsync(ctx, existing);
             return Results.Redirect(flow.ReturnUrl);

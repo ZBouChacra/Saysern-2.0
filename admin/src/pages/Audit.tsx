@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, errorMessage, type AuditRow, type Paged } from "../api";
 
+import { formatWhen } from "../time";
+import { t } from "../texts";
+import { tn } from "../i18n";
 export default function Audit() {
   const [f, setF] = useState({ search: "", action: "", entityType: "", actorId: "", from: "", to: "" });
   const [applied, setApplied] = useState(f);
@@ -18,31 +21,31 @@ export default function Audit() {
 
   return (
     <main className="card full">
-      <h1>Audit log</h1>
-      <p className="muted">Every back-office change, written in the same database transaction as the change itself. Entries can't be edited or deleted.</p>
+      <h1>{t("Audit log")}</h1>
+      <p className="muted">{t("Every back-office change, written in the same database transaction as the change itself. Entries can't be edited or deleted.")}</p>
       <form className="toolbar" onSubmit={e => { e.preventDefault(); setPage(1); setApplied(f); }}>
-        <input placeholder="Search" aria-label="Search audit" value={f.search} onChange={set("search")} />
-        <input placeholder="Action (e.g. settings.update)" aria-label="Action" value={f.action} onChange={set("action")} />
-        <input placeholder="Entity (e.g. user)" aria-label="Entity type" value={f.entityType} onChange={set("entityType")} />
-        <input placeholder="Actor id" aria-label="Actor id" value={f.actorId} onChange={set("actorId")} style={{ maxWidth: 110 }} />
-        <input type="date" aria-label="From" value={f.from} onChange={set("from")} /><input type="date" aria-label="To" value={f.to} onChange={set("to")} />
-        <button className="btn">Filter</button>
+        <input placeholder={t("Search")} aria-label={t("Search audit")} value={f.search} onChange={set("search")} />
+        <input placeholder={t("Action (e.g. settings.update)")} aria-label={t("Action")} value={f.action} onChange={set("action")} />
+        <input placeholder={t("Entity (e.g. user)")} aria-label={t("Entity type")} value={f.entityType} onChange={set("entityType")} />
+        <input placeholder={t("Actor id")} aria-label={t("Actor id")} value={f.actorId} onChange={set("actorId")} style={{ maxWidth: 110 }} />
+        <input type="date" aria-label={t("From")} value={f.from} onChange={set("from")} /><input type="date" aria-label={t("To")} value={f.to} onChange={set("to")} />
+        <button className="btn">{t("Filter")}</button>
       </form>
       {error && <p className="error" role="alert">{error}</p>}
       {data && (
         <>
-          <div className="table-wrap"><table className="t"><thead><tr><th>When</th><th>Who</th><th>Action</th><th>What</th><th /></tr></thead><tbody>
+          <div className="table-wrap"><table className="t"><thead><tr><th>{t("When")}</th><th>{t("Who")}</th><th>{t("Action")}</th><th>{t("What")}</th><th /></tr></thead><tbody>
             {data.items.map(r => (
               <>
-                <tr key={r.id}><td>{new Date(r.occurredAt).toLocaleString()}</td><td>{r.actorName ?? <span className="muted">system</span>}</td><td><code>{r.action}</code></td><td>{r.summary}</td>
-                  <td>{r.details !== undefined && <button className="btn small secondary" onClick={() => setOpen(open === r.id ? null : r.id)}>{open === r.id ? "Hide" : "Details"}</button>}</td></tr>
-                {open === r.id && <tr key={`${r.id}d`}><td colSpan={5}><pre className="json">{JSON.stringify(r.details, null, 2)}</pre>{r.ip && <span className="muted small">IP {r.ip}</span>}</td></tr>}
+                <tr key={r.id}><td>{formatWhen(r.occurredAt)}</td><td>{r.actorName ?? <span className="muted">{t("system")}</span>}</td><td><code>{r.action}</code></td><td>{r.summary}</td>
+                  <td>{r.details !== undefined && <button className="btn small secondary" onClick={() => setOpen(open === r.id ? null : r.id)}>{open === r.id ? t("Hide") : t("Details")}</button>}</td></tr>
+                {open === r.id && <tr key={`${r.id}d`}><td colSpan={5}><pre className="json">{JSON.stringify(r.details, null, 2)}</pre>{r.ip && <span className="muted small">{t("IP {ip}", { ip: r.ip })}</span>}</td></tr>}
               </>
             ))}
-            {data.items.length === 0 && <tr><td colSpan={5} className="muted">No entries.</td></tr>}
+            {data.items.length === 0 && <tr><td colSpan={5} className="muted">{t("No entries.")}</td></tr>}
           </tbody></table></div>
-          <p className="row spread"><span className="muted">{data.total} entr{data.total === 1 ? "y" : "ies"}</span>
-            <span className="row"><button className="btn small secondary" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button><span>Page {page} of {pages}</span><button className="btn small secondary" disabled={page >= pages} onClick={() => setPage(page + 1)}>Next</button></span></p>
+          <p className="row spread"><span className="muted">{tn(data.total, "1 entry", "{n} entries")}</span>
+            <span className="row"><button className="btn small secondary" disabled={page <= 1} onClick={() => setPage(page - 1)}>{t("Previous")}</button><span>{t("Page {page} of {pages}", { page, pages })}</span><button className="btn small secondary" disabled={page >= pages} onClick={() => setPage(page + 1)}>{t("Next")}</button></span></p>
         </>
       )}
     </main>

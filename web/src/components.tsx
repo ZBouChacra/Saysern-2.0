@@ -1,12 +1,14 @@
 import { Link } from "react-router-dom";
 import { useState, type ChangeEvent } from "react";
+import { formatWhen } from "./time";
 import { api, errorMessage, type Listing, type UploadPurpose } from "./api";
 import { useLookup } from "./config";
 
+import { t } from "./texts";
 export function Stars({ value, count }: { value: number; count?: number }) {
   const full = Math.round(value);
   return (
-    <span className="stars" aria-label={`${value.toFixed(1)} out of 5`}>
+    <span className="stars" aria-label={t("{value} out of 5", { value: value.toFixed(1) })}>
       {"★".repeat(full)}{"☆".repeat(5 - full)}
       {count !== undefined && <span className="muted"> ({count})</span>}
     </span>
@@ -15,7 +17,7 @@ export function Stars({ value, count }: { value: number; count?: number }) {
 
 export const money = (n?: number) => (n === undefined || n === null ? "—" : `$${n.toFixed(2)}/h`);
 export const fullName = (first: string, last: string) => `${first} ${last}`.trim();
-export const when = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+export const when = formatWhen;
 
 export function ListingCard({ l }: { l: Listing }) {
   const countries = useLookup("country");
@@ -24,9 +26,9 @@ export function ListingCard({ l }: { l: Listing }) {
       <Avatar photo={l.profilePhoto} name={l.firstName} />
       <div className="grow">
         <strong>{fullName(l.firstName, l.lastName)}</strong>
-        {l.isPremium && <span className="pill ok">premium</span>} {l.isStarred && <span className="pill">★ featured</span>}
+        {l.isPremium && <span className="pill ok">{t("premium")}</span>} {l.isStarred && <span className="pill">{t("★ featured")}</span>}
         <div className="muted">{l.serviceName} · {l.categoryName}</div>
-        <div className="muted">{[l.city, countries.label(l.country)].filter(Boolean).join(", ") || "—"} · {l.yearsOfExperience} yrs</div>
+        <div className="muted">{[l.city, countries.label(l.country)].filter(Boolean).join(", ") || "—"}{" "}{t("· {yearsOfExperience} yrs", { yearsOfExperience: l.yearsOfExperience })}</div>
       </div>
       <div className="right">
         <Stars value={l.avgRating} count={l.totalReviews} />
@@ -59,9 +61,9 @@ export function PhotoPicker({ label, purpose, value, onChange }: { label: string
       <span className="label">{label}</span>
       {value && <img src={value} alt="" className={purpose === "banner_photo" ? "banner-preview" : "avatar photo big"} />}
       <div className="row">
-        <label className="btn small secondary file-btn">{busy ? "Uploading…" : value ? "Change" : "Upload"}
+        <label className="btn small secondary file-btn">{busy ? t("Uploading…") : value ? t("Change") : t("Upload")}
           <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" onChange={pick} disabled={busy} hidden aria-label={label} /></label>
-        {value && <button type="button" className="link" onClick={() => onChange(undefined)}>Remove</button>}
+        {value && <button type="button" className="link" onClick={() => onChange(undefined)}>{t("Remove")}</button>}
       </div>
       {error && <span className="field-error" role="alert">{error}</span>}
     </div>

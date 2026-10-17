@@ -237,6 +237,7 @@ CREATE PROCEDURE sp_ad_batches_set_status(IN p_actor_id BIGINT UNSIGNED, IN p_id
 BEGIN
   DECLARE v_current VARCHAR(10);
   DECLARE v_desc VARCHAR(400);
+  DECLARE v_desc_ar VARCHAR(400);
   DECLARE v_qty INT;
   DECLARE v_unit DECIMAL(10,2);
   DECLARE v_sub DECIMAL(12,2);
@@ -261,7 +262,12 @@ BEGIN
     SELECT CONCAT('Advertisement "', a.title, '" (', IFNULL((SELECT t.name FROM lookup_values v JOIN lookup_translations t ON t.value_id = v.id AND t.language = 'en' WHERE v.type_code = 'ad_position' AND v.code = a.position), a.position),
                   '), ', b.date_from, ' to ', b.date_to), DATEDIFF(b.date_to, b.date_from) + 1, b.fee_per_day, b.total_fee
       INTO v_desc, v_qty, v_unit, v_sub FROM ad_batches b JOIN ads a ON a.id = b.ad_id WHERE b.id = p_id;
+    SELECT CONCAT('إعلان "', a.title, '" (', COALESCE((SELECT t.name FROM lookup_values v JOIN lookup_translations t ON t.value_id = v.id AND t.language = 'ar' WHERE v.type_code = 'ad_position' AND v.code = a.position),
+                  (SELECT t.name FROM lookup_values v JOIN lookup_translations t ON t.value_id = v.id AND t.language = 'en' WHERE v.type_code = 'ad_position' AND v.code = a.position), a.position),
+                  ')، ', b.date_from, ' إلى ', b.date_to)
+      INTO v_desc_ar FROM ad_batches b JOIN ads a ON a.id = b.ad_id WHERE b.id = p_id;
     CALL sp_payment_issue(p_actor_id, 'ad', p_id, NULL, v_desc, v_qty, v_unit, v_sub, p_billed_to, p_billed_details, p_method, p_reference, p_received_on, p_notes);
+    UPDATE payments SET description_ar = v_desc_ar WHERE ad_batch_id = p_id AND status = 'issued';
   ELSEIF v_current = 'paid' THEN
     CALL sp_payment_void(p_actor_id, p_id, NULL);
   END IF;

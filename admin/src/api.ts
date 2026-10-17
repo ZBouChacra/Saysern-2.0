@@ -49,7 +49,7 @@ export interface AdBatch { id: number; adId: number; dateFrom: string; dateTo: s
 /** Who paid and how. Marking a batch paid records this and issues a numbered receipt. */
 export interface BillingInput { billedTo: string; billedDetails?: string; method: string; reference?: string; receivedOn?: string; notes?: string }
 export interface PaymentRow { id: number; receiptNumber: string; kind: "ad" | "premium"; description: string; subtotal: number; vatAmount: number; total: number; currency: string; billedTo: string; method: string; reference?: string; receivedOn: string; status: "issued" | "void"; issuedAt: string }
-export interface Receipt { id: number; seq: number; receiptNumber: string; kind: "ad" | "premium"; description: string; quantity: number; unitPrice: number; subtotal: number; vatPercent: number; vatAmount: number; total: number; currency: string; billedTo: string; billedDetails?: string; method: string; methodName?: string; reference?: string; receivedOn: string; notes?: string; status: "issued" | "void"; voidReason?: string; voidedAt?: string; issuedAt: string; companyName: string; companyAddress?: string; companyTaxId?: string; footer?: string }
+export interface Receipt { descriptionAr?: string; methodNameAr?: string; id: number; seq: number; receiptNumber: string; kind: "ad" | "premium"; description: string; quantity: number; unitPrice: number; subtotal: number; vatPercent: number; vatAmount: number; total: number; currency: string; billedTo: string; billedDetails?: string; method: string; methodName?: string; reference?: string; receivedOn: string; notes?: string; status: "issued" | "void"; voidReason?: string; voidedAt?: string; issuedAt: string; companyName: string; companyAddress?: string; companyTaxId?: string; footer?: string }
 export interface PaymentSummary { rows: { kind: string; method: string; receipts: number; subtotal: number; vat: number; total: number }[]; voided: number; total: number }
 export interface AdPricing { id: number; position: string; countryCode?: string; city?: string; dailyFee?: number; maxAds?: number }
 export interface ResolvedPricing { dailyFee: number; maxAds: number }
@@ -76,6 +76,15 @@ export interface Dashboard {
   system?: { failedJobs?: number; pendingJobs?: number; failedEmails?: number; queuedEmails?: number };
   recentActivity?: { id: number; occurredAt: string; actorName?: string; action: string; summary: string }[];
 }
+export interface DashboardYear { year: number; years: number[]; columns: string[]; months: Record<string, number>[] }
+export interface UserDetail {
+  user: { id: number; email: string; emailVerified: boolean; firstName: string; lastName: string; role: string; profileType: string; isLocked: boolean; isDisabled?: boolean; isStarred: boolean; isPremium: boolean; createdAtUtc: string; preferredLanguage?: string; timeZone?: string };
+  profile: { phone?: string; sex?: string; dateOfBirth?: string; nationality?: string; country?: string; city?: string; bio?: string; portfolio?: string } | null;
+  professions: { id: number; categoryName: string; serviceName: string; country?: string; city?: string; costPerHour?: number; yearsOfExperience: number; isHidden: boolean }[];
+  availability: { professionId?: number; dayOfWeek: number; startTime: string; endTime: string }[];
+  appointments: { id: number; startsAt: string; durationMinutes: number; status: string; clientFirstName: string; clientLastName: string; professionalFirstName: string; professionalLastName: string }[];
+  counts: { appointmentsAsClient: number; appointmentsAsProfessional: number; reviewsWritten: number; reviewsReceived: number; reviewsHidden: number; conversations: number; premiumBatches: number };
+}
 export interface JobRow { id: number; type: string; payload?: unknown; status: "pending" | "running" | "done" | "failed"; attempts: number; maxAttempts: number; runAt: string; lastError?: string; createdAt: string; finishedAt?: string }
 export interface JobStat { type: string; status: string; count: number }
 export interface AuditFilter { from?: string; to?: string; actorId?: string; action?: string; entityType?: string; search?: string; page?: number; pageSize?: number }
@@ -85,6 +94,17 @@ async function uploadAdImage(file: File): Promise<{ id: string; url: string }> {
   const form = new FormData();
   form.append("file", file, file.name);
   const response = await fetch("/api/admin/ads/images", { method: "POST", credentials: "same-origin", headers: { "X-Requested-With": "sayserne-admin" }, body: form });
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : undefined;
+  if (!response.ok) throw new ApiError(response.status, data?.error ?? (response.status === 413 ? "FILE_TOO_LARGE" : "UNKNOWN"), data?.errors);
+  return data as { id: string; url: string };
+}
+
+/** Uploads the site's logo (multipart); choosing it is then the ordinary setting Brand.LogoFileId. */
+async function uploadLogo(file: File): Promise<{ id: string; url: string }> {
+  const form = new FormData();
+  form.append("file", file, file.name);
+  const response = await fetch("/api/admin/brand/logo", { method: "POST", credentials: "same-origin", headers: { "X-Requested-With": "sayserne-admin" }, body: form });
   const text = await response.text();
   const data = text ? JSON.parse(text) : undefined;
   if (!response.ok) throw new ApiError(response.status, data?.error ?? (response.status === 413 ? "FILE_TOO_LARGE" : "UNKNOWN"), data?.errors);
@@ -136,6 +156,7 @@ export const api = {
   ads: (position?: string) => request<Ad[]>("GET", `/admin/ads${q({ position })}`),
   saveAd: (id: number | null, body: AdInput) => (id === null ? request<Ad>("POST", "/admin/ads", body) : request<Ad>("PUT", `/admin/ads/${id}`, body)),
   uploadAdImage,
+  uploadLogo,
   adBatches: (adId?: number) => request<AdBatch[]>("GET", `/admin/ads/batches${q({ adId })}`),
   createAdBatch: (adId: number, from: string, to: string) => request<AdBatch>("POST", `/admin/ads/${adId}/batches`, { from, to }),
   setAdBatchStatus: (id: number, status: "paid" | "cancelled", billing?: BillingInput) => request<AdBatch>("POST", `/admin/ads/batches/${id}/status`, { status, ...billing }),
@@ -168,6 +189,8 @@ export const api = {
   contactGet: (id: number) => request<ContactMessage>("GET", `/admin/contact/${id}`),
   contactReply: (id: number, body: string) => request<ContactMessage>("POST", `/admin/contact/${id}/reply`, { body }),
   contactStatus: (id: number, status: string, note?: string) => request<ContactMessage>("POST", `/admin/contact/${id}/status`, { status, note }),
+  userDetail: (id: number) => request<UserDetail>("GET", `/admin/users/${id}`),
+  dashboardYear: (year?: number) => request<DashboardYear>("GET", `/admin/dashboard/year${year ? `?year=${year}` : ""}`),
   dashboard: () => request<Dashboard>("GET", "/admin/dashboard"),
   emailOutbox: (status: string, page: number) => request<Paged<OutboxRow>>("GET", `/admin/email/outbox${q({ status, page, pageSize: 25 })}`),
   sendTestEmail: (to: string) => request<{ sent: boolean }>("POST", "/admin/email/test", { to }),

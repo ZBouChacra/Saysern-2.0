@@ -28,10 +28,10 @@ END$$
 -- What the public sees: no email, phone or date of birth (age only). Only listed professionals are visible.
 CREATE PROCEDURE sp_profile_get_public(IN p_user_id BIGINT UNSIGNED)
 BEGIN
-  SELECT id, first_name, last_name, sex, nationality, country, city, profile_photo, banner_photo, bio, portfolio,
+  SELECT id, first_name, last_name, sex, nationality, country, city, profile_photo, banner_photo, bio, portfolio, time_zone,
          TIMESTAMPDIFF(YEAR, date_of_birth, UTC_DATE()) AS age, EXISTS (SELECT 1 FROM premium_days pdx JOIN professions prx ON prx.id = pdx.profession_id WHERE prx.user_id = users.id AND pdx.day = UTC_DATE()) AS is_premium, is_starred
   FROM users
-  WHERE id = p_user_id AND profile_type = 'professional' AND is_locked = 0;
+  WHERE id = p_user_id AND profile_type = 'professional' AND is_locked = 0 AND is_disabled = 0;
 END$$
 
 -- Replaces the editable profile fields (NULL clears an optional field).

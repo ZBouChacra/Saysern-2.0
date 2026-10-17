@@ -4,6 +4,7 @@ import { useAuth } from "./auth";
 import { CityInput, LookupSelect } from "./components";
 import { useLookup } from "./config";
 
+import { t } from "./texts";
 export interface Place { country?: string; city?: string }
 interface PlaceState extends Place { source: "saved" | "profile" | "none"; setPlace: (p: Place) => void; clear: () => void }
 
@@ -61,14 +62,14 @@ export function PlacePicker() {
   useEffect(() => { setCountry(place.country); setCity(place.city ?? ""); }, [place.country, place.city]);
   return (
     <details className="place-picker">
-      <summary aria-label="Your location">📍 {label || "Set your location"}</summary>
+      <summary aria-label={t("Your location")}>📍 {label || t("Set your location")}</summary>
       <div className="place-pop">
-        <p className="muted small">We use this to show you ads and professionals near you.</p>
-        <label>Country<LookupSelect type="country" value={country} onChange={v => { setCountry(v); setCity(""); }} emptyLabel="Not set" /></label>
+        <p className="muted small">{t("We use this to show you ads and professionals near you.")}</p>
+        <label>{t("Country")}<LookupSelect type="country" value={country} onChange={v => { setCountry(v); setCity(""); }} emptyLabel={t("Not set")} /></label>
         <CityInput country={country} value={city} onChange={setCity} />
         <div className="row">
-          <button type="button" className="btn small" onClick={e => { place.setPlace({ country, city: city.trim() || undefined }); (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; }}>Save</button>
-          {place.source === "saved" && <button type="button" className="link" onClick={() => place.clear()}>Forget it</button>}
+          <button type="button" className="btn small" onClick={e => { place.setPlace({ country, city: city.trim() || undefined }); (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; }}>{t("Save")}</button>
+          {place.source === "saved" && <button type="button" className="link" onClick={() => place.clear()}>{t("Forget it")}</button>}
         </div>
       </div>
     </details>

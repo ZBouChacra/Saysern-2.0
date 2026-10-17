@@ -5,6 +5,7 @@ DROP PROCEDURE IF EXISTS sp_admin_users_set_locked;
 DROP PROCEDURE IF EXISTS sp_admin_users_set_role;
 DROP PROCEDURE IF EXISTS sp_admin_users_promote_by_email;
 DROP PROCEDURE IF EXISTS sp_admin_users_set_flags;
+DROP PROCEDURE IF EXISTS sp_admin_user_counts;
 
 DELIMITER $$
 
@@ -23,7 +24,7 @@ BEGIN
   END IF;
 
   SELECT u.id, u.email, u.email_verified, u.password_hash, u.first_name, u.last_name, u.role, u.profile_type,
-         u.is_locked, u.failed_login_attempts, u.locked_until, u.created_at, EXISTS (SELECT 1 FROM premium_days pdx JOIN professions prx ON prx.id = pdx.profession_id WHERE prx.user_id = u.id AND pdx.day = UTC_DATE()) AS is_premium, u.is_starred,
+         u.is_locked, u.failed_login_attempts, u.locked_until, u.created_at, u.is_disabled, u.time_zone, u.preferred_language, EXISTS (SELECT 1 FROM premium_days pdx JOIN professions prx ON prx.id = pdx.profession_id WHERE prx.user_id = u.id AND pdx.day = UTC_DATE()) AS is_premium, u.is_starred,
          (SELECT GROUP_CONCAT(r.name ORDER BY r.name SEPARATOR ', ') FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = u.id) AS role_names,
          EXISTS (SELECT 1 FROM user_two_factor t WHERE t.user_id = u.id AND t.confirmed_at IS NOT NULL) AS has_two_factor
   FROM users u
@@ -138,6 +139,19 @@ BEGIN
                       JSON_OBJECT('starred', p_is_starred), NULL);
   COMMIT;
   CALL sp_users_get_by_id(p_user_id);
+END$$
+
+-- A few numbers for the user detail view (everything else on that view comes from the ordinary profile, listing, availability and appointment procedures).
+CREATE PROCEDURE sp_admin_user_counts(IN p_user_id BIGINT UNSIGNED)
+BEGIN
+  SELECT
+    (SELECT COUNT(*) FROM appointments WHERE client_id = p_user_id)                                       AS appointments_as_client,
+    (SELECT COUNT(*) FROM appointments WHERE professional_id = p_user_id)                                 AS appointments_as_professional,
+    (SELECT COUNT(*) FROM reviews WHERE reviewer_id = p_user_id)                                          AS reviews_written,
+    (SELECT COUNT(*) FROM reviews WHERE professional_id = p_user_id AND is_deleted = 0)                   AS reviews_received,
+    (SELECT COUNT(*) FROM reviews WHERE professional_id = p_user_id AND is_deleted = 1)                   AS reviews_hidden,
+    (SELECT COUNT(*) FROM chat_rooms WHERE user_a_id = p_user_id OR user_b_id = p_user_id)                AS conversations,
+    (SELECT COUNT(*) FROM premium_batches pb JOIN professions pr ON pr.id = pb.profession_id WHERE pr.user_id = p_user_id) AS premium_batches;
 END$$
 
 DELIMITER ;

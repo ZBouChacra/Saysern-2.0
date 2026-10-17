@@ -1,0 +1,3155 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "SaySerné API",
+    "version": "1.0",
+    "description": "The public API used by the web site (and the mobile app). Generated from the code.\n\n**Signing in.** `POST /api/auth/login` (or register / Google) sets the `sayserne.auth` cookie; send it with every request. **Cross-site protection.** Every request that changes data (anything but GET) must carry an `Origin` header the API allows, or the header `X-Requested-With: sayserne-web`; otherwise it is refused with `CSRF_REJECTED`. A native app has no `Origin`, so it sends the header.\n\n**Errors** use one shape (see `Error`). **Responses** are JSON unless noted; their exact shapes are the types in `web/src/api.ts`. Times are UTC ISO 8601. Business limits (lengths, counts, durations) are runtime settings published by `GET /api/config/public`; texts and lists come from `/api/translations/{language}` and `/api/lookups/{type}`."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "The same host that serves the site"
+    }
+  ],
+  "paths": {
+    "/api/ads": {
+      "get": {
+        "operationId": "getApiAds",
+        "tags": [
+          "ads"
+        ],
+        "summary": "GET /api/ads",
+        "description": "Public: no sign-in needed.",
+        "parameters": [
+          {
+            "name": "position",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "city",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ads/{id}/click": {
+      "get": {
+        "operationId": "getApiAdsIdClick",
+        "tags": [
+          "ads"
+        ],
+        "summary": "GET /api/ads/{id}/click",
+        "description": "Public: no sign-in needed.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "x-rate-limit-policy": "ads",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ads/{id}/impression": {
+      "post": {
+        "operationId": "postApiAdsIdImpression",
+        "tags": [
+          "ads"
+        ],
+        "summary": "POST /api/ads/{id}/impression",
+        "description": "Public: no sign-in needed.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "x-rate-limit-policy": "ads",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/alerts": {
+      "get": {
+        "operationId": "getApiAlerts",
+        "tags": [
+          "alerts"
+        ],
+        "summary": "GET /api/alerts",
+        "description": "Requires a signed-in session.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "postApiAlerts",
+        "tags": [
+          "alerts"
+        ],
+        "summary": "POST /api/alerts",
+        "description": "Requires a signed-in session.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertInput"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/alerts/{id}": {
+      "delete": {
+        "operationId": "deleteApiAlertsId",
+        "tags": [
+          "alerts"
+        ],
+        "summary": "DELETE /api/alerts/{id}",
+        "description": "Requires a signed-in session.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/alerts/{id}/run": {
+      "get": {
+        "operationId": "getApiAlertsIdRun",
+        "tags": [
+          "alerts"
+        ],
+        "summary": "GET /api/alerts/{id}/run",
+        "description": "Requires a signed-in session.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            }
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/appointments": {
+      "get": {
+        "operationId": "getApiAppointments",
+        "tags": [
+          "appointments"
+        ],
+        "summary": "GET /api/appointments",
+        "description": "Requires a signed-in session.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "postApiAppointments",
+        "tags": [
+          "appointments"
+        ],
+        "summary": "POST /api/appointments",
+        "description": "Requires a signed-in session.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BookingInput"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/appointments/{id}/status": {
+      "post": {
+        "operationId": "postApiAppointmentsIdStatus",
+        "tags": [
+          "appointments"
+        ],
+        "summary": "POST /api/appointments/{id}/status",
+        "description": "Requires a signed-in session.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatusInput"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/forgot-password": {
+      "post": {
+        "operationId": "postApiAuthForgotPassword",
+        "tags": [
+          "auth"
+        ],
+        "summary": "POST /api/auth/forgot-password",
+        "description": "Public: no sign-in needed.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotRequest"
+              }
+            }
+          }
+        },
+        "x-rate-limit-policy": "auth",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/google/callback": {
+      "get": {
+        "operationId": "getApiAuthGoogleCallback",
+        "tags": [
+          "auth"
+        ],
+        "summary": "GET /api/auth/google/callback",
+        "description": "Public: no sign-in needed.",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-rate-limit-policy": "auth",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/google/link-pending": {
+      "post": {
+        "operationId": "postApiAuthGoogleLinkPending",
+        "tags": [
+          "auth"
+        ],
+        "summary": "POST /api/auth/google/link-pending",
+        "description": "Public: no sign-in needed.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkPendingRequest"
+              }
+            }
+          }
+        },
+        "x-rate-limit-policy": "auth",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/google/start": {
+      "get": {
+        "operationId": "getApiAuthGoogleStart",
+        "tags": [
+          "auth"
+        ],
+        "summary": "GET /api/auth/google/start",
+        "description": "Public: no sign-in needed.",
+        "parameters": [
+          {
+            "name": "returnUrl",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-rate-limit-policy": "auth",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "operationId": "postApiAuthLogin",
+        "tags": [
+          "auth"
+        ],
+        "summary": "POST /api/auth/login",
+        "description": "Public: no sign-in needed.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "x-rate-limit-policy": "auth",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "operationId": "postApiAuthLogout",
+        "tags": [
+          "auth"
+        ],
+        "summary": "POST /api/auth/logout",
+        "description": "Public: no sign-in needed.",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "operationId": "getApiAuthMe",
+        "tags": [
+          "auth"
+        ],
+        "summary": "GET /api/auth/me",
+        "description": "Requires a signed-in session.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/providers": {
+      "get": {
+        "operationId": "getApiAuthProviders",
+        "tags": [
+          "auth"
+        ],
+        "summary": "GET /api/auth/providers",
+        "description": "Public: no sign-in needed.",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/reenable/confirm": {
+      "post": {
+        "operationId": "postApiAuthReenableConfirm",
+        "tags": [
+          "auth"
+        ],
+        "summary": "POST /api/auth/reenable/confirm",
+        "description": "Public: no sign-in needed.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReenableConfirm"
+              }
+            }
+          }
+        },
+        "x-rate-limit-policy": "auth",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/reenable/request": {
+      "post": {
+        "operationId": "postApiAuthReenableRequest",
+        "tags": [
+          "auth"
+        ],
+        "summary": "POST /api/auth/reenable/request",
+        "description": "Public: no sign-in needed.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReenableRequest"
+              }
+            }
+          }
+        },
+        "x-rate-limit-policy": "auth",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "operationId": "postApiAuthRegister",
+        "tags": [
+          "auth"
+        ],
+        "summary": "POST /api/auth/register",
+        "description": "Public: no sign-in needed.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          }
+        },
+        "x-rate-limit-policy": "auth",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/resend-verification": {
+      "post": {
+        "operationId": "postApiAuthResendVerification",
+        "tags": [
+          "auth"
+        ],
+        "summary": "POST /api/auth/resend-verification",
+        "description": "Requires a signed-in session.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "auth",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/reset-password": {
+      "post": {
+        "operationId": "postApiAuthResetPassword",
+        "tags": [
+          "auth"
+        ],
+        "summary": "POST /api/auth/reset-password",
+        "description": "Public: no sign-in needed.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetRequest"
+              }
+            }
+          }
+        },
+        "x-rate-limit-policy": "auth",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/verify-email": {
+      "post": {
+        "operationId": "postApiAuthVerifyEmail",
+        "tags": [
+          "auth"
+        ],
+        "summary": "POST /api/auth/verify-email",
+        "description": "Public: no sign-in needed.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            }
+          }
+        },
+        "x-rate-limit-policy": "auth",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/catalog/categories": {
+      "get": {
+        "operationId": "getApiCatalogCategories",
+        "tags": [
+          "catalog"
+        ],
+        "summary": "GET /api/catalog/categories",
+        "description": "Public: no sign-in needed.",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/catalog/services": {
+      "get": {
+        "operationId": "getApiCatalogServices",
+        "tags": [
+          "catalog"
+        ],
+        "summary": "GET /api/catalog/services",
+        "description": "Public: no sign-in needed.",
+        "parameters": [
+          {
+            "name": "categoryId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chat/rooms": {
+      "get": {
+        "operationId": "getApiChatRooms",
+        "tags": [
+          "chat"
+        ],
+        "summary": "GET /api/chat/rooms",
+        "description": "Requires a signed-in session.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "postApiChatRooms",
+        "tags": [
+          "chat"
+        ],
+        "summary": "POST /api/chat/rooms",
+        "description": "Requires a signed-in session.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartChatInput"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chat/rooms/{roomId}": {
+      "delete": {
+        "operationId": "deleteApiChatRoomsRoomId",
+        "tags": [
+          "chat"
+        ],
+        "summary": "DELETE /api/chat/rooms/{roomId}",
+        "description": "Requires a signed-in session.",
+        "parameters": [
+          {
+            "name": "roomId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chat/rooms/{roomId}/messages": {
+      "get": {
+        "operationId": "getApiChatRoomsRoomIdMessages",
+        "tags": [
+          "chat"
+        ],
+        "summary": "GET /api/chat/rooms/{roomId}/messages",
+        "description": "Requires a signed-in session.",
+        "parameters": [
+          {
+            "name": "roomId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            }
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "postApiChatRoomsRoomIdMessages",
+        "tags": [
+          "chat"
+        ],
+        "summary": "POST /api/chat/rooms/{roomId}/messages",
+        "description": "Requires a signed-in session.",
+        "parameters": [
+          {
+            "name": "roomId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessageInput"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chat/rooms/{roomId}/messages/{messageId}": {
+      "delete": {
+        "operationId": "deleteApiChatRoomsRoomIdMessagesMessageId",
+        "tags": [
+          "chat"
+        ],
+        "summary": "DELETE /api/chat/rooms/{roomId}/messages/{messageId}",
+        "description": "Requires a signed-in session.",
+        "parameters": [
+          {
+            "name": "roomId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "messageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chat/unread-count": {
+      "get": {
+        "operationId": "getApiChatUnreadCount",
+        "tags": [
+          "chat"
+        ],
+        "summary": "GET /api/chat/unread-count",
+        "description": "Requires a signed-in session.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/config/public": {
+      "get": {
+        "operationId": "getApiConfigPublic",
+        "tags": [
+          "config"
+        ],
+        "summary": "GET /api/config/public",
+        "description": "Public: no sign-in needed.",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/contact": {
+      "post": {
+        "operationId": "postApiContact",
+        "tags": [
+          "contact"
+        ],
+        "summary": "POST /api/contact",
+        "description": "Public: no sign-in needed.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactInput"
+              }
+            }
+          }
+        },
+        "x-rate-limit-policy": "contact",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files": {
+      "post": {
+        "operationId": "postApiFiles",
+        "tags": [
+          "files"
+        ],
+        "summary": "POST /api/files",
+        "description": "Requires a signed-in session.",
+        "parameters": [
+          {
+            "name": "purpose",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "roomId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/{id}": {
+      "get": {
+        "operationId": "getApiFilesId",
+        "tags": [
+          "files"
+        ],
+        "summary": "GET /api/files/{id}",
+        "description": "Public: no sign-in needed.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/{id}/status": {
+      "get": {
+        "operationId": "getApiFilesIdStatus",
+        "tags": [
+          "files"
+        ],
+        "summary": "GET /api/files/{id}/status",
+        "description": "Requires a signed-in session.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "operationId": "getApiHealth",
+        "tags": [
+          "health"
+        ],
+        "summary": "GET /api/health",
+        "description": "Public: no sign-in needed.",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lookups/{type}": {
+      "get": {
+        "operationId": "getApiLookupsType",
+        "tags": [
+          "lookups"
+        ],
+        "summary": "GET /api/lookups/{type}",
+        "description": "Public: no sign-in needed.",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "parent",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/availability": {
+      "get": {
+        "operationId": "getApiMeAvailability",
+        "tags": [
+          "me"
+        ],
+        "summary": "GET /api/me/availability",
+        "description": "Requires a signed-in session.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "putApiMeAvailability",
+        "tags": [
+          "me"
+        ],
+        "summary": "PUT /api/me/availability",
+        "description": "Requires a signed-in session.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AvailabilityInput"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/disable": {
+      "post": {
+        "operationId": "postApiMeDisable",
+        "tags": [
+          "me"
+        ],
+        "summary": "POST /api/me/disable",
+        "description": "Requires a signed-in session.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DisableInput"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "auth",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/notifications": {
+      "get": {
+        "operationId": "getApiMeNotifications",
+        "tags": [
+          "me"
+        ],
+        "summary": "GET /api/me/notifications",
+        "description": "Requires a signed-in session.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "putApiMeNotifications",
+        "tags": [
+          "me"
+        ],
+        "summary": "PUT /api/me/notifications",
+        "description": "Requires a signed-in session.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreferenceRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/password": {
+      "post": {
+        "operationId": "postApiMePassword",
+        "tags": [
+          "me"
+        ],
+        "summary": "POST /api/me/password",
+        "description": "Requires a signed-in session.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordInput"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "auth",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/preferences": {
+      "put": {
+        "operationId": "putApiMePreferences",
+        "tags": [
+          "me"
+        ],
+        "summary": "PUT /api/me/preferences",
+        "description": "Requires a signed-in session.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreferencesInput"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/professions": {
+      "get": {
+        "operationId": "getApiMeProfessions",
+        "tags": [
+          "me"
+        ],
+        "summary": "GET /api/me/professions",
+        "description": "Requires a signed-in session.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "postApiMeProfessions",
+        "tags": [
+          "me"
+        ],
+        "summary": "POST /api/me/professions",
+        "description": "Requires a signed-in session.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfessionInput"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/professions/{id}": {
+      "delete": {
+        "operationId": "deleteApiMeProfessionsId",
+        "tags": [
+          "me"
+        ],
+        "summary": "DELETE /api/me/professions/{id}",
+        "description": "Requires a signed-in session.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "putApiMeProfessionsId",
+        "tags": [
+          "me"
+        ],
+        "summary": "PUT /api/me/professions/{id}",
+        "description": "Requires a signed-in session.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfessionInput"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/profile": {
+      "get": {
+        "operationId": "getApiMeProfile",
+        "tags": [
+          "me"
+        ],
+        "summary": "GET /api/me/profile",
+        "description": "Requires a signed-in session.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "putApiMeProfile",
+        "tags": [
+          "me"
+        ],
+        "summary": "PUT /api/me/profile",
+        "description": "Requires a signed-in session.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileInput"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/professionals/search": {
+      "get": {
+        "operationId": "getApiProfessionalsSearch",
+        "tags": [
+          "professionals"
+        ],
+        "summary": "GET /api/professionals/search",
+        "description": "Public: no sign-in needed.",
+        "parameters": [
+          {
+            "name": "categoryId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          },
+          {
+            "name": "serviceId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "nullable": true
+            }
+          },
+          {
+            "name": "firstName",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lastName",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sex",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "minAge",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            }
+          },
+          {
+            "name": "maxAge",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            }
+          },
+          {
+            "name": "nationality",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "city",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasOffice",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "nullable": true
+            }
+          },
+          {
+            "name": "minStars",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "nullable": true
+            }
+          },
+          {
+            "name": "minCost",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "nullable": true
+            }
+          },
+          {
+            "name": "maxCost",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "nullable": true
+            }
+          },
+          {
+            "name": "minExperience",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            }
+          },
+          {
+            "name": "maxExperience",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            }
+          },
+          {
+            "name": "hasTeam",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "nullable": true
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            }
+          },
+          {
+            "name": "visitorCountry",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "visitorCity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/professionals/top": {
+      "get": {
+        "operationId": "getApiProfessionalsTop",
+        "tags": [
+          "professionals"
+        ],
+        "summary": "GET /api/professionals/top",
+        "description": "Public: no sign-in needed.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/professionals/{userId}": {
+      "get": {
+        "operationId": "getApiProfessionalsUserId",
+        "tags": [
+          "professionals"
+        ],
+        "summary": "GET /api/professionals/{userId}",
+        "description": "Public: no sign-in needed.",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/professionals/{userId}/busy": {
+      "get": {
+        "operationId": "getApiProfessionalsUserIdBusy",
+        "tags": [
+          "professionals"
+        ],
+        "summary": "GET /api/professionals/{userId}/busy",
+        "description": "Public: no sign-in needed.",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "nullable": true
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/professionals/{userId}/reviews": {
+      "get": {
+        "operationId": "getApiProfessionalsUserIdReviews",
+        "tags": [
+          "professionals"
+        ],
+        "summary": "GET /api/professionals/{userId}/reviews",
+        "description": "Public: no sign-in needed.",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reviews": {
+      "post": {
+        "operationId": "postApiReviews",
+        "tags": [
+          "reviews"
+        ],
+        "summary": "POST /api/reviews",
+        "description": "Requires a signed-in session.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewInput"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reviews/eligible": {
+      "get": {
+        "operationId": "getApiReviewsEligible",
+        "tags": [
+          "reviews"
+        ],
+        "summary": "GET /api/reviews/eligible",
+        "description": "Requires a signed-in session.",
+        "parameters": [
+          {
+            "name": "professionalId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reviews/{id}/reply": {
+      "put": {
+        "operationId": "putApiReviewsIdReply",
+        "tags": [
+          "reviews"
+        ],
+        "summary": "PUT /api/reviews/{id}/reply",
+        "description": "Requires a signed-in session.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplyInput"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "x-rate-limit-policy": "write",
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/translations/{language}": {
+      "get": {
+        "operationId": "getApiTranslationsLanguage",
+        "tags": [
+          "translations"
+        ],
+        "summary": "GET /api/translations/{language}",
+        "description": "Public: no sign-in needed.",
+        "parameters": [
+          {
+            "name": "language",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success (JSON body unless the endpoint streams a file or returns 204)."
+          },
+          "default": {
+            "description": "An error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AlertInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "searchCriteria": {
+            "$ref": "#/components/schemas/SearchFilters"
+          },
+          "frequency": {
+            "type": "string"
+          }
+        }
+      },
+      "AvailabilityInput": {
+        "type": "object",
+        "properties": {
+          "professionId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "slots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SlotInput"
+            }
+          }
+        }
+      },
+      "BookingInput": {
+        "type": "object",
+        "properties": {
+          "professionalId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "professionId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "startsAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "durationMinutes": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      },
+      "ContactInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "topic": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "website": {
+            "type": "string"
+          }
+        }
+      },
+      "DisableInput": {
+        "type": "object",
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "confirmEmail": {
+            "type": "string"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "description": "What every failed request returns. `error` is a stable code (the web app shows a translated text for it); `errors` maps field names to messages for validation failures.",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "example": "VALIDATION_FAILED"
+          },
+          "errors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ForgotRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          }
+        }
+      },
+      "LinkPendingRequest": {
+        "type": "object",
+        "properties": {
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "PasswordInput": {
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string"
+          },
+          "newPassword": {
+            "type": "string"
+          }
+        }
+      },
+      "PreferenceRequest": {
+        "type": "object",
+        "properties": {
+          "event": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean",
+            "nullable": true
+          }
+        }
+      },
+      "PreferencesInput": {
+        "type": "object",
+        "properties": {
+          "language": {
+            "type": "string"
+          },
+          "timeZone": {
+            "type": "string"
+          }
+        }
+      },
+      "ProfessionInput": {
+        "type": "object",
+        "properties": {
+          "categoryId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "serviceId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "country": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "costPerHour": {
+            "type": "number",
+            "nullable": true
+          },
+          "yearsOfExperience": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "website": {
+            "type": "string"
+          },
+          "hasTeam": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "teamSize": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "hasOffice": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "officeAddress": {
+            "type": "string"
+          },
+          "officeCity": {
+            "type": "string"
+          },
+          "officeCountry": {
+            "type": "string"
+          },
+          "geographicAreas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "isHidden": {
+            "type": "boolean",
+            "nullable": true
+          }
+        }
+      },
+      "ProfileInput": {
+        "type": "object",
+        "properties": {
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "sex": {
+            "type": "string"
+          },
+          "dateOfBirth": {
+            "type": "string"
+          },
+          "nationality": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "bio": {
+            "type": "string"
+          },
+          "portfolio": {
+            "type": "string"
+          },
+          "profilePhoto": {
+            "type": "string"
+          },
+          "bannerPhoto": {
+            "type": "string"
+          },
+          "preferredLanguage": {
+            "type": "string"
+          },
+          "profileType": {
+            "type": "string"
+          }
+        }
+      },
+      "ReenableConfirm": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        }
+      },
+      "ReenableRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "RegisterRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          }
+        }
+      },
+      "ReplyInput": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "ResetRequest": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "ReviewInput": {
+        "type": "object",
+        "properties": {
+          "appointmentId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "rating": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "comment": {
+            "type": "string"
+          }
+        }
+      },
+      "SearchFilters": {
+        "type": "object",
+        "properties": {
+          "categoryId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "serviceId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "sex": {
+            "type": "string"
+          },
+          "minAge": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "maxAge": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "nationality": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "hasOffice": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "minStars": {
+            "type": "number",
+            "nullable": true
+          },
+          "minCost": {
+            "type": "number",
+            "nullable": true
+          },
+          "maxCost": {
+            "type": "number",
+            "nullable": true
+          },
+          "minExperience": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "maxExperience": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "hasTeam": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "visitorCountry": {
+            "type": "string"
+          },
+          "visitorCity": {
+            "type": "string"
+          }
+        }
+      },
+      "SendMessageInput": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "latitude": {
+            "type": "number",
+            "nullable": true
+          },
+          "longitude": {
+            "type": "number",
+            "nullable": true
+          },
+          "fileId": {
+            "type": "string"
+          }
+        }
+      },
+      "SlotInput": {
+        "type": "object",
+        "properties": {
+          "dayOfWeek": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "startTime": {
+            "type": "string"
+          },
+          "endTime": {
+            "type": "string"
+          }
+        }
+      },
+      "StartChatInput": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        }
+      },
+      "StatusInput": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "TokenRequest": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "sayserne.auth",
+        "description": "Set by the sign-in endpoints."
+      }
+    }
+  }
+}

@@ -238,3 +238,31 @@ describe("contact inbox and dashboard", () => {
     expect((fn.mock.calls[0] as unknown as [string])[0]).toBe("/api/admin/dashboard");
   });
 });
+
+describe("brand", () => {
+  it("measures contrast and accepts only #rrggbb", async () => {
+    const { contrastWithWhite, isHex } = await import("./brand");
+    expect(isHex("#2d6d5f")).toBe(true);
+    for (const bad of ["red", "#fff", "#12345g", "2d6d5f", ""]) expect(isHex(bad)).toBe(false);
+    expect(contrastWithWhite("#2d6d5f")).toBeGreaterThan(4.5);
+    expect(contrastWithWhite("#ffe066")).toBeLessThan(2);
+  });
+  it("uploads the logo as a multipart file to its own address", async () => {
+    const fn = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "abc", url: "/api/files/abc" }), { status: 201 }));
+    vi.stubGlobal("fetch", fn);
+    expect((await api.uploadLogo(new File(["x"], "logo.png", { type: "image/png" }))).id).toBe("abc");
+    expect((fn.mock.calls[0] as unknown as [string, RequestInit])[0]).toBe("/api/admin/brand/logo");
+    expect((fn.mock.calls[0] as unknown as [string, RequestInit])[1].method).toBe("POST");
+  });
+});
+
+describe("year view", () => {
+  it("asks for a given year, or this year when none is chosen", async () => {
+    const one = mockFetch(200, { year: 2025, years: [2026, 2025], columns: ["newUsers"], months: [] });
+    await api.dashboardYear(2025);
+    expect((one.mock.calls[0] as unknown as [string])[0]).toBe("/api/admin/dashboard/year?year=2025");
+    const none = mockFetch(200, { year: 2026, years: [2026], columns: [], months: [] });
+    await api.dashboardYear();
+    expect((none.mock.calls[0] as unknown as [string])[0]).toBe("/api/admin/dashboard/year");
+  });
+});

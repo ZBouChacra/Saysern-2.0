@@ -8,6 +8,8 @@ import { useAuth } from "../auth";
 import { usePlace } from "../place";
 import { ListingCard } from "../components";
 
+import { t } from "../texts";
+import { tx } from "../i18n";
 export default function Search() {
   const frequencies = useLookup("alert_frequency");
   const { user } = useAuth();
@@ -37,7 +39,7 @@ export default function Search() {
   async function saveAlert() {
     const name = window.prompt("Name this saved search");
     if (!name) return;
-    try { await api.createAlert(name, { ...filters, page: undefined, pageSize: undefined }, frequencies.values[0]?.code ?? "daily"); setSaved("Saved. Find it under Alerts."); }
+    try { await api.createAlert(name, { ...filters, page: undefined, pageSize: undefined }, frequencies.values[0]?.code ?? "daily"); setSaved(t("Saved. Find it under Alerts.")); }
     catch (e) { setSaved(errorMessage(e)); }
   }
 
@@ -45,51 +47,48 @@ export default function Search() {
   return (
     <main className="card wide">
       <AdSlot position="search_banner" />
-      <h1>Find a professional</h1>
+      <h1>{t("Find a professional")}</h1>
       <form onSubmit={submit} className="filters">
-        <label>Category
-          <select value={draft.categoryId ?? ""} onChange={e => set({ categoryId: num(e.target.value), serviceId: undefined })}>
-            <option value="">Any</option>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        <label>{t("Category")}<select value={draft.categoryId ?? ""} onChange={e => set({ categoryId: num(e.target.value), serviceId: undefined })}>
+            <option value="">{t("Any")}</option>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select></label>
-        <label>Service
-          <select value={draft.serviceId ?? ""} onChange={e => set({ serviceId: num(e.target.value) })}>
-            <option value="">Any</option>{services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+        <label>{t("Service")}<select value={draft.serviceId ?? ""} onChange={e => set({ serviceId: num(e.target.value) })}>
+            <option value="">{t("Any")}</option>{services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select></label>
-        <label>Country<LookupSelect type="country" value={draft.country} onChange={v => set({ country: v })} emptyLabel="Any" /></label>
-        <label>City<input value={draft.city ?? ""} onChange={e => set({ city: e.target.value })} /></label>
-        <label>Sex<LookupSelect type="sex" value={draft.sex} onChange={v => set({ sex: v })} emptyLabel="Any" /></label>
-        <label>Nationality<LookupSelect type="nationality" value={draft.nationality} onChange={v => set({ nationality: v })} emptyLabel="Any" /></label>
-        <label>Name<input value={draft.firstName ?? ""} onChange={e => set({ firstName: e.target.value })} /></label>
-        <label>Min rating
-          <select value={draft.minStars ?? ""} onChange={e => set({ minStars: num(e.target.value) })}>
-            <option value="">Any</option>{[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}★+</option>)}
+        <label>{t("Country")}<LookupSelect type="country" value={draft.country} onChange={v => set({ country: v })} emptyLabel={t("Any")} /></label>
+        <label>{t("City")}<input value={draft.city ?? ""} onChange={e => set({ city: e.target.value })} /></label>
+        <label>{t("Sex")}<LookupSelect type="sex" value={draft.sex} onChange={v => set({ sex: v })} emptyLabel={t("Any")} /></label>
+        <label>{t("Nationality")}<LookupSelect type="nationality" value={draft.nationality} onChange={v => set({ nationality: v })} emptyLabel={t("Any")} /></label>
+        <label>{t("Name")}<input value={draft.firstName ?? ""} onChange={e => set({ firstName: e.target.value })} /></label>
+        <label>{t("Min rating")}<select value={draft.minStars ?? ""} onChange={e => set({ minStars: num(e.target.value) })}>
+            <option value="">{t("Any")}</option>{[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}★+</option>)}
           </select></label>
-        <label>Max $/hour<input type="number" min={0} value={draft.maxCost ?? ""} onChange={e => set({ maxCost: num(e.target.value) })} /></label>
-        <label>Min years<input type="number" min={0} value={draft.minExperience ?? ""} onChange={e => set({ minExperience: num(e.target.value) })} /></label>
-        <label className="check"><input type="checkbox" checked={draft.hasOffice === true} onChange={e => set({ hasOffice: e.target.checked ? true : undefined })} /> Has an office</label>
-        <label className="check"><input type="checkbox" checked={draft.hasTeam === true} onChange={e => set({ hasTeam: e.target.checked ? true : undefined })} /> Has a team</label>
-        <div className="row"><button className="btn">Search</button><button type="button" className="btn secondary" onClick={() => setParams({})}>Clear</button></div>
+        <label>{t("Max $/hour")}<input type="number" min={0} value={draft.maxCost ?? ""} onChange={e => set({ maxCost: num(e.target.value) })} /></label>
+        <label>{t("Min years")}<input type="number" min={0} value={draft.minExperience ?? ""} onChange={e => set({ minExperience: num(e.target.value) })} /></label>
+        <label className="check"><input type="checkbox" checked={draft.hasOffice === true} onChange={e => set({ hasOffice: e.target.checked ? true : undefined })} />{" "}{t("Has an office")}</label>
+        <label className="check"><input type="checkbox" checked={draft.hasTeam === true} onChange={e => set({ hasTeam: e.target.checked ? true : undefined })} />{" "}{t("Has a team")}</label>
+        <div className="row"><button className="btn">{t("Search")}</button><button type="button" className="btn secondary" onClick={() => setParams({})}>{t("Clear")}</button></div>
       </form>
 
       {error && <p className="error" role="alert">{error}</p>}
-      {!result && !error && <p className="muted">Searching…</p>}
+      {!result && !error && <p className="muted">{t("Searching…")}</p>}
       {result && (
         <>
           <p className="row spread">
-            <span className="muted">{result.total} professional{result.total === 1 ? "" : "s"} found</span>
-            {user && <button className="btn small secondary" onClick={() => void saveAlert()}>Save this search</button>}
+            <span className="muted">{result.total === 1 ? t("1 professional found") : t("{total} professionals found", { total: result.total })}</span>
+            {user && <button className="btn small secondary" onClick={() => void saveAlert()}>{t("Save this search")}</button>}
           </p>
           {saved && <p className="muted">{saved}</p>}
           <div className="with-sidebar">
             <div className="list">{result.items.map(l => <ListingCard key={l.professionId} l={l} />)}</div>
             <AdSlot position="sidebar" />
           </div>
-          {result.items.length === 0 && <p className="muted">No professionals match. Try removing a filter.</p>}
-          {!user && result.total > 0 && <p className="muted"><Link to="/login">Sign in</Link> to book, message or save this search.</p>}
+          {result.items.length === 0 && <p className="muted">{t("No professionals match. Try removing a filter.")}</p>}
+          {!user && result.total > 0 && <p className="muted">{tx("{link} to book, message or save this search.", { link: <Link to="/login">{t("Sign in")}</Link> })}</p>}
           <p className="row spread">
-            <button className="btn small secondary" disabled={result.page <= 1} onClick={() => go(result.page - 1)}>Previous</button>
-            <span>Page {result.page} of {pages}</span>
-            <button className="btn small secondary" disabled={result.page >= pages} onClick={() => go(result.page + 1)}>Next</button>
+            <button className="btn small secondary" disabled={result.page <= 1} onClick={() => go(result.page - 1)}>{t("Previous")}</button>
+            <span>{t("Page {page} of {pages}", { page: result.page, pages })}</span>
+            <button className="btn small secondary" disabled={result.page >= pages} onClick={() => go(result.page + 1)}>{t("Next")}</button>
           </p>
         </>
       )}

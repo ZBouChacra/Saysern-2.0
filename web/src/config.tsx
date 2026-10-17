@@ -1,5 +1,6 @@
 import { Fragment, createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { setTexts } from "./texts";
+import { applyBrand } from "./brand";
+import { setTexts, t } from "./texts";
 
 /** Everything the site needs to render itself comes from the API: public settings, languages, lookups, texts. Nothing is compiled in. */
 
@@ -44,6 +45,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       const chosen = langs.some(l => l.code === saved) ? saved! : String(cfg["Site.DefaultLanguage"] ?? "en");
       setTexts(await loadTexts(chosen));
       applyDirection(chosen, langs);
+      applyBrand({ primary: String(cfg["Brand.PrimaryColor"] ?? ""), dark: String(cfg["Brand.PrimaryDarkColor"] ?? ""), accent: String(cfg["Brand.AccentColor"] ?? "") });
       setConfig(cfg); setLanguages(langs); setLangState(chosen);
     })().catch(() => setFailed(true));
   }, []);
@@ -54,8 +56,8 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     setLang: (l: string) => { void loadTexts(l).then(t => { setTexts(t); applyDirection(l, languages); setLangState(l); try { localStorage.setItem(LANG_KEY, l); } catch { /* ignore */ } }); },
   }) : null, [config, lang, languages]);
 
-  if (failed) return <main className="card"><h1>We can't reach the server</h1><p className="muted">Please check your connection and reload the page.</p></main>;
-  if (!value) return <p className="muted" style={{ padding: "2rem" }}>Loading…</p>;
+  if (failed) return <main className="card"><h1>{t("We can't reach the server")}</h1><p className="muted">{t("Please check your connection and reload the page.")}</p></main>;
+  if (!value) return <p className="muted" style={{ padding: "2rem" }}>{t("Loading…")}</p>;
   return <Ctx.Provider value={value}><Fragment key={lang}>{children}</Fragment></Ctx.Provider>;
 }
 

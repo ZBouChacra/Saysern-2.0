@@ -6,16 +6,16 @@ namespace Sayserne.Api.Data;
 public sealed record UserRecord(
     long Id, string Email, bool EmailVerified, string? PasswordHash, string FirstName, string LastName,
     string Role, string ProfileType, bool IsLocked, int FailedLoginAttempts, DateTime? LockedUntilUtc, DateTime CreatedAtUtc,
-    bool IsPremium = false, bool IsStarred = false)
+    bool IsPremium = false, bool IsStarred = false, bool IsDisabled = false, string? TimeZone = null, string? PreferredLanguage = null)
 {
-    public UserDto ToDto() => new(Id, Email, EmailVerified, FirstName, LastName, Role, ProfileType, IsLocked, CreatedAtUtc, IsPremium, IsStarred);
+    public UserDto ToDto() => new(Id, Email, EmailVerified, FirstName, LastName, Role, ProfileType, IsLocked, CreatedAtUtc, IsPremium, IsStarred, IsDisabled, TimeZone, PreferredLanguage);
     public bool IsTemporarilyLocked(DateTime nowUtc) => LockedUntilUtc is { } until && until > nowUtc;
 }
 
 /// <summary>What the API returns about a user.</summary>
 public sealed record UserDto(
     long Id, string Email, bool EmailVerified, string FirstName, string LastName,
-    string Role, string ProfileType, bool IsLocked, DateTime CreatedAtUtc, bool IsPremium = false, bool IsStarred = false);
+    string Role, string ProfileType, bool IsLocked, DateTime CreatedAtUtc, bool IsPremium = false, bool IsStarred = false, bool IsDisabled = false, string? TimeZone = null, string? PreferredLanguage = null);
 
 public sealed record PagedResult<T>(IReadOnlyList<T> Items, long Total, int Page, int PageSize);
 
@@ -39,5 +39,13 @@ internal static class Mappers
         r.Long("id"), r.Str("email"), r.Bool("email_verified"), r.StrOrNull("password_hash"),
         r.Str("first_name"), r.Str("last_name"), r.Str("role"), r.Str("profile_type"),
         r.Bool("is_locked"), (int)r.Long("failed_login_attempts"), r.UtcOrNull("locked_until"), r.Utc("created_at"),
-        r.Bool("is_premium"), r.Bool("is_starred"));
+        r.Bool("is_premium"), r.Bool("is_starred"),
+        Has(r, "is_disabled") && r.Bool("is_disabled"), Has(r, "time_zone") ? r.StrOrNull("time_zone") : null, Has(r, "preferred_language") ? r.StrOrNull("preferred_language") : null);
+
+    /// <summary>Not every procedure that returns a user row returns every column: the newer ones are optional.</summary>
+    private static bool Has(DbDataReader r, string column)
+    {
+        for (var i = 0; i < r.FieldCount; i++) if (string.Equals(r.GetName(i), column, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
 }

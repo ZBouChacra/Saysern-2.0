@@ -2,12 +2,16 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError, api, errorMessage } from "../api";
 import { useAuth } from "../auth";
+import { useLang } from "../config";
 import { useConfig } from "../config";
 import { validateRegistration } from "../validation";
 import GoogleButton from "./GoogleButton";
 
+import { t } from "../texts";
+import { passwordHint } from "../i18n";
 export default function Register() {
   const { setUser } = useAuth();
+  const { lang } = useLang();
   const navigate = useNavigate();
   const cfg = useConfig();
   const rules = { minLength: cfg.num("Auth.PasswordMinLength"), requireLetter: cfg.bool("Auth.PasswordRequireLetter"), requireDigit: cfg.bool("Auth.PasswordRequireDigit") };
@@ -25,7 +29,9 @@ export default function Register() {
     if (Object.keys(local).length > 0) return;
     setBusy(true);
     try {
-      setUser(await api.register({ ...form, email: form.email.trim(), firstName: form.firstName.trim(), lastName: form.lastName.trim() }));
+      const created = await api.register({ ...form, email: form.email.trim(), firstName: form.firstName.trim(), lastName: form.lastName.trim() });
+      // the language they are using becomes their account's language (e-mails, next sign-in); not being able to save it must not stop the sign-up
+      setUser(created.preferredLanguage === lang ? created : await api.updatePreferences(lang, created.timeZone).catch(() => created));
       navigate("/");
     } catch (err) {
       if (err instanceof ApiError && err.fieldErrors) setFieldErrors(err.fieldErrors);
@@ -44,17 +50,17 @@ export default function Register() {
 
   return (
     <main className="card narrow">
-      <h1>Create your account</h1>
+      <h1>{t("Create your account")}</h1>
       <form onSubmit={submit} noValidate>
         <div className="grid2">{field("firstName", "First name", "text", "given-name")}{field("lastName", "Last name", "text", "family-name")}</div>
         {field("email", "Email", "email", "email")}
         {field("password", "Password", "password", "new-password")}
-        <p className="hint">At least {rules.minLength} characters{rules.requireLetter && rules.requireDigit ? ", with a letter and a digit" : rules.requireLetter ? ", with a letter" : rules.requireDigit ? ", with a digit" : ""}.</p>
+        <p className="hint">{passwordHint(rules.minLength, rules.requireLetter, rules.requireDigit)}</p>
         {error && <p className="error" role="alert">{error}</p>}
-        <button className="btn" disabled={busy}>{busy ? "Creating…" : "Create account"}</button>
+        <button className="btn" disabled={busy}>{busy ? t("Creating…") : t("Create account")}</button>
       </form>
       <GoogleButton />
-      <p className="muted">Already registered? <Link to="/login">Sign in</Link></p>
+      <p className="muted">{t("Already registered?")}{" "}<Link to="/login">{t("Sign in")}</Link></p>
     </main>
   );
 }

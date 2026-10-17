@@ -120,7 +120,7 @@ public sealed partial class EmailRenderer(IPlatformRepository platform, ISetting
 
 // ------------------------------------------------------------------ data
 
-public sealed record NotifyTarget(long UserId, string Email, string FirstName, string Language, bool Enabled);
+public sealed record NotifyTarget(long UserId, string Email, string FirstName, string Language, bool Enabled, string? TimeZone = null);
 public sealed record OutboxRow(long Id, long? UserId, string To, string EventCode, string Language, string Subject, string? BodyText, string? BodyHtml, string Status, int Attempts, string? LastError, DateTime CreatedAt, DateTime? SentAt);
 public sealed record NotificationPreference(string Event, string Channel, bool Enabled);
 
@@ -128,6 +128,7 @@ public interface IEmailRepository
 {
     Task CreateTokenAsync(long userId, string purpose, string tokenHash, int ttlMinutes, CancellationToken ct = default);
     Task<long> VerifyEmailAsync(string tokenHash, CancellationToken ct = default);
+    Task<long> ReenableAccountAsync(string tokenHash, CancellationToken ct = default);
     Task<long> ResetPasswordAsync(string tokenHash, string passwordHash, CancellationToken ct = default);
     Task<NotifyTarget?> PrepareAsync(long userId, string eventCode, string channel, CancellationToken ct = default);
     Task<long> CreateOutboxAsync(long? userId, string to, string eventCode, string language, RenderedEmail mail, CancellationToken ct = default);
@@ -150,12 +151,15 @@ public sealed class EmailRepository(IStoredProcedureExecutor db) : IEmailReposit
     public async Task<long> VerifyEmailAsync(string tokenHash, CancellationToken ct = default) =>
         (await db.QueryAsync("sp_email_verify", new ProcParams().Add("p_token_hash", tokenHash), r => r.Long("user_id"), ct))[0];
 
+    public async Task<long> ReenableAccountAsync(string tokenHash, CancellationToken ct = default) =>
+        (await db.QueryAsync("sp_account_reenable", new ProcParams().Add("p_token_hash", tokenHash), r => r.Long("user_id"), ct))[0];
+
     public async Task<long> ResetPasswordAsync(string tokenHash, string passwordHash, CancellationToken ct = default) =>
         (await db.QueryAsync("sp_password_reset", new ProcParams().Add("p_token_hash", tokenHash).Add("p_password_hash", passwordHash), r => r.Long("user_id"), ct))[0];
 
     public Task<NotifyTarget?> PrepareAsync(long userId, string eventCode, string channel, CancellationToken ct = default) =>
         db.QuerySingleOrDefaultAsync("sp_notify_prepare", new ProcParams().Add("p_user_id", userId).Add("p_event", eventCode).Add("p_channel", channel),
-            r => new NotifyTarget(r.Long("id"), r.Str("email"), r.Str("first_name"), r.Str("preferred_language"), r.Bool("enabled")), ct);
+            r => new NotifyTarget(r.Long("id"), r.Str("email"), r.Str("first_name"), r.Str("preferred_language"), r.Bool("enabled"), r.StrOrNull("time_zone")), ct);
 
     public async Task<long> CreateOutboxAsync(long? userId, string to, string eventCode, string language, RenderedEmail mail, CancellationToken ct = default) =>
         (await db.QueryAsync("sp_email_outbox_create", new ProcParams().Add("p_user_id", userId).Add("p_to", to).Add("p_event", eventCode).Add("p_language", language)
@@ -203,7 +207,8 @@ public sealed class Notifier(IEmailRepository repo, IEmailRenderer renderer, IJo
         {
             var target = await repo.PrepareAsync(userId, eventCode, "email", ct);
             if (target is not { Enabled: true }) return;
-            var values = new Dictionary<string, string>(data) { ["name"] = target.FirstName };
+            var values = EmailTimes.Localise(data, target.TimeZone, settings.GetString("Site.DefaultTimeZone"));   // each "x_utc" becomes "x" in THIS person's time zone
+            values["name"] = target.FirstName;
             var mail = await renderer.RenderAsync(eventCode, target.Language, values, ct);
             var id = await repo.CreateOutboxAsync(userId, target.Email, eventCode, target.Language, mail, ct);
             await jobs.EnqueueAsync(EmailSendJobHandler.JobType, new { outboxId = id }, ct: ct);
@@ -295,6 +300,20 @@ public sealed class AccountEmails(IEmailRepository repo, INotifier notifier, ISe
         await repo.CreateTokenAsync(user.Id, "verify_email", Hash(token), hours * 60, ct);
         await notifier.NotifyAsync("verify_email", user.Id, new Dictionary<string, string> { ["link"] = Link("/verify-email?token=" + token), ["hours"] = hours.ToString() }, ct);
     }
+
+    /// <summary>The link that brings a disabled account back (the person has already proved the password, or signed in with Google).</summary>
+    public async Task SendReenableAsync(UserRecord user, CancellationToken ct = default)
+    {
+        if (Off) return;
+        var hours = settings.GetInt("Email.VerifyTokenHours");
+        var token = NewToken();
+        await repo.CreateTokenAsync(user.Id, "reenable_account", Hash(token), hours * 60, ct);
+        await notifier.NotifyAsync("reenable_account", user.Id, new Dictionary<string, string> { ["link"] = Link("/reenable?token=" + token), ["hours"] = hours.ToString() }, ct);
+    }
+
+    /// <summary>"Your password was changed", with a link to reset it if that was not you.</summary>
+    public Task SendPasswordChangedAsync(UserRecord user, CancellationToken ct = default) =>
+        notifier.NotifyAsync("password_changed", user.Id, new Dictionary<string, string> { ["link"] = Link("/forgot-password") }, ct);
 
     public async Task SendPasswordResetAsync(UserRecord user, CancellationToken ct = default)
     {

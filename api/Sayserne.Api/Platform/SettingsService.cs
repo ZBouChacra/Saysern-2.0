@@ -76,6 +76,8 @@ public sealed class SettingsService(IStoredProcedureExecutor db, SettingOverride
     /// <summary>Facts the web app needs that are derived from several settings.</summary>
     private Dictionary<string, object> WithDerived(Dictionary<string, object> values)
     {
+        // the logo is served by id; the public sees only its address ("" = no logo)
+        values["Brand.LogoUrl"] = _snapshot.Rows.ContainsKey("Brand.LogoFileId") && GetString("Brand.LogoFileId") is { Length: > 0 } logo ? $"/api/files/{logo}" : "";
         values["Email.VerificationRequired"] = _snapshot.Rows.ContainsKey("Auth.RequireVerifiedEmail") && GetBool("Auth.RequireVerifiedEmail") && GetString("Email.Provider") != "off";
         return values;
     }

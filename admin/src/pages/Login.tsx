@@ -4,6 +4,7 @@ import QRCode from "qrcode";
 import { api, errorMessage } from "../api";
 import { useSession } from "../session";
 
+import { t } from "../texts";
 type Step = "password" | "code" | "enroll" | "recovery-codes";
 
 export default function Login() {
@@ -46,42 +47,42 @@ export default function Login() {
 
   return (
     <main className="card narrow">
-      <h1>Back office</h1>
+      <h1>{t("Back office")}</h1>
       {step === "password" && (
         <form onSubmit={submitPassword} noValidate>
-          <label>Email<input type="email" autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} required /></label>
-          <label>Password<input type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} required /></label>
+          <label>{t("Email")}<input type="email" autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} required /></label>
+          <label>{t("Password")}<input type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} required /></label>
           {error && <p className="error" role="alert">{error}</p>}
-          <button className="btn" disabled={busy}>{busy ? "Checking…" : "Continue"}</button>
-          <p className="hint">Two-factor sign-in is required for every back-office account.</p>
+          <button className="btn" disabled={busy}>{busy ? t("Checking…") : t("Continue")}</button>
+          <p className="hint">{t("Two-factor sign-in is required for every back-office account.")}</p>
         </form>
       )}
       {step === "code" && (
         <form onSubmit={submitCode} noValidate>
-          <p>{useRecovery ? "Enter one of your recovery codes. Each works once." : "Enter the 6-digit code from your authenticator app."}</p>
-          <label>{useRecovery ? "Recovery code" : "Authenticator code"}
+          <p>{useRecovery ? t("Enter one of your recovery codes. Each works once.") : t("Enter the 6-digit code from your authenticator app.")}</p>
+          <label>{useRecovery ? t("Recovery code") : t("Authenticator code")}
             <input inputMode={useRecovery ? "text" : "numeric"} autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value)} autoFocus required /></label>
           {error && <p className="error" role="alert">{error}</p>}
-          <button className="btn" disabled={busy || code.trim().length === 0}>{busy ? "Checking…" : "Sign in"}</button>
-          <p><button type="button" className="link" onClick={() => { setUseRecovery(!useRecovery); setCode(""); setError(null); }}>{useRecovery ? "Use my authenticator instead" : "I lost my device: use a recovery code"}</button></p>
+          <button className="btn" disabled={busy || code.trim().length === 0}>{busy ? t("Checking…") : t("Sign in")}</button>
+          <p><button type="button" className="link" onClick={() => { setUseRecovery(!useRecovery); setCode(""); setError(null); }}>{useRecovery ? t("Use my authenticator instead") : t("I lost my device: use a recovery code")}</button></p>
         </form>
       )}
       {step === "enroll" && enroll && (
         <form onSubmit={submitEnroll} noValidate>
-          <p><b>Set up your authenticator.</b> Scan this with Google Authenticator, Microsoft Authenticator, Authy or 1Password, then enter the 6-digit code it shows.</p>
-          <img src={enroll.qr} alt="Authenticator QR code" width={220} height={220} />
-          <p className="hint">Can't scan? Enter this key manually: <code data-testid="totp-secret">{enroll.secret}</code></p>
-          <label>6-digit code<input inputMode="numeric" autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value)} autoFocus required /></label>
+          <p><b>{t("Set up your authenticator.")}</b>{" "}{t("Scan this with Google Authenticator, Microsoft Authenticator, Authy or 1Password, then enter the 6-digit code it shows.")}</p>
+          <img src={enroll.qr} alt={t("Authenticator QR code")} width={220} height={220} />
+          <p className="hint">{t("Can't scan? Enter this key manually:")}{" "}<code data-testid="totp-secret">{enroll.secret}</code></p>
+          <label>{t("6-digit code")}<input inputMode="numeric" autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value)} autoFocus required /></label>
           {error && <p className="error" role="alert">{error}</p>}
-          <button className="btn" disabled={busy || code.trim().length === 0}>{busy ? "Checking…" : "Confirm and continue"}</button>
+          <button className="btn" disabled={busy || code.trim().length === 0}>{busy ? t("Checking…") : t("Confirm and continue")}</button>
         </form>
       )}
       {step === "recovery-codes" && (
         <div>
-          <p><b>Save your recovery codes.</b> If you lose your device, each of these signs you in once. They are shown only now.</p>
+          <p><b>{t("Save your recovery codes.")}</b>{" "}{t("If you lose your device, each of these signs you in once. They are shown only now.")}</p>
           <ul className="codes" data-testid="recovery-codes">{recoveryCodes.map(c => <li key={c}><code>{c}</code></li>)}</ul>
-          <p className="row"><button className="btn secondary" onClick={() => void navigator.clipboard?.writeText(recoveryCodes.join("\n"))}>Copy</button>
-            <button className="btn" onClick={() => { setSession(pendingSession); navigate("/"); }}>I have saved them</button></p>
+          <p className="row"><button className="btn secondary" onClick={() => void navigator.clipboard?.writeText(recoveryCodes.join("\n"))}>{t("Copy")}</button>
+            <button className="btn" onClick={() => { setSession(pendingSession); navigate("/"); }}>{t("I have saved them")}</button></p>
         </div>
       )}
     </main>

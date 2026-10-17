@@ -7,7 +7,66 @@ namespace Sayserne.Api.Endpoints;
 /// <summary>The back-office home page: headline numbers, each group shown only to staff whose role lets them see that area, plus recent activity.</summary>
 public static class DashboardEndpoints
 {
-    public static void MapDashboard(this IEndpointRouteBuilder app) =>
+    private sealed record MonthRow(int Month, long NewUsers, long Appointments, long Reviews, long ContactMessages, long Receipts, decimal Received, long Voided);
+
+    /// <summary>The year asked for: a whole number from 2000 up to next year; empty means this year.</summary>
+    private static int ParseYear(string? text, TimeProvider clock)
+    {
+        var now = clock.GetUtcNow().Year;
+        if (string.IsNullOrWhiteSpace(text)) return now;
+        if (!int.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var year) || year < 2000 || year > now + 1)
+            throw new AppException("VALIDATION_FAILED", 400, fieldErrors: new Dictionary<string, string> { ["year"] = "Enter a year from 2000 to next year." });
+        return year;
+    }
+
+    private static async Task<(List<MonthRow> Months, List<int> Years)> LoadYear(IStoredProcedureExecutor db, int year, CancellationToken ct)
+    {
+        var (months, years) = await db.QueryTwoAsync("sp_dashboard_year", new ProcParams().Add("p_year", year),
+            r => new MonthRow(r.Int("month"), r.Long("new_users"), r.Long("appointments"), r.Long("reviews"), r.Long("contact_messages"), r.Long("receipts"), r.Dec("received"), r.Long("voided")),
+            r => r.Int("year"), ct);
+        return (months.ToList(), years.ToList());
+    }
+
+    public static void MapDashboard(this IEndpointRouteBuilder app)
+    {
+        // the same numbers, month by month, for one calendar year; each column only for staff who may see that area
+        app.MapGet("/api/admin/dashboard/year", async (HttpContext ctx, IStoredProcedureExecutor db, TimeProvider clock, string? year) =>
+        {
+            var y = ParseYear(year, clock);
+            var (months, years) = await LoadYear(db, y, ctx.RequestAborted);
+            var cols = Columns(ctx);
+            return Results.Ok(new { year = y, years, columns = cols.Select(c => c.Key), months = months.Select(m => { var row = new Dictionary<string, object> { ["month"] = m.Month }; foreach (var c in cols) row[c.Key] = c.Value(m); return row; }) });
+        }).RequireAuthorization(PermissionExtensions.StaffPolicy);
+
+        // a spreadsheet of that year (UTF-8 with a byte-order mark so Excel reads it correctly)
+        app.MapGet("/api/admin/dashboard/year.csv", async (HttpContext ctx, IStoredProcedureExecutor db, TimeProvider clock, string? year) =>
+        {
+            var y = ParseYear(year, clock);
+            var (months, _) = await LoadYear(db, y, ctx.RequestAborted);
+            var cols = Columns(ctx);
+            var csv = new System.Text.StringBuilder("\uFEFF");
+            csv.Append("Year,Month").Append(string.Concat(cols.Select(c => "," + c.Header))).Append("\r\n");
+            foreach (var m in months)
+                csv.Append(y).Append(',').Append(System.Globalization.CultureInfo.InvariantCulture.DateTimeFormat.GetMonthName(m.Month)).Append(string.Concat(cols.Select(c => "," + Convert.ToString(c.Value(m), System.Globalization.CultureInfo.InvariantCulture)))).Append("\r\n");
+            ctx.Response.Headers.ContentDisposition = $"attachment; filename=\"sayserne-{y}.csv\"";
+            return Results.Text(csv.ToString(), "text/csv; charset=utf-8");
+        }).RequireAuthorization(PermissionExtensions.StaffPolicy);
+
+        MapSummary(app);
+    }
+
+    private static List<(string Key, string Header, Func<MonthRow, object> Value)> Columns(HttpContext ctx)
+    {
+        bool Can(string p) => ctx.User.HasClaim(AdminAuth.PermissionClaim, p);
+        var cols = new List<(string, string, Func<MonthRow, object>)>();
+        if (Can("users.read")) { cols.Add(("newUsers", "New users", m => m.NewUsers)); cols.Add(("appointments", "Appointments requested", m => m.Appointments)); }
+        if (Can("reviews.read")) cols.Add(("reviews", "Reviews", m => m.Reviews));
+        if (Can("contact.read")) cols.Add(("contactMessages", "Contact messages", m => m.ContactMessages));
+        if (Can("payments.read")) { cols.Add(("receipts", "Receipts issued", m => m.Receipts)); cols.Add(("received", "Amount received (USD)", m => m.Received)); cols.Add(("voided", "Receipts voided", m => m.Voided)); }
+        return cols;
+    }
+
+    private static void MapSummary(IEndpointRouteBuilder app) =>
         app.MapGet("/api/admin/dashboard", async (HttpContext ctx, IStoredProcedureExecutor db, IPlatformRepository platform) =>
         {
             bool Can(string p) => ctx.User.HasClaim(AdminAuth.PermissionClaim, p);

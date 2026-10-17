@@ -65,6 +65,7 @@ public static class AuthEndpoints
             throw new AppException("INVALID_CREDENTIALS");
         }
 
+        if (user.IsDisabled) throw new AppException("ACCOUNT_DISABLED");      // only reached with the right password, so it reveals nothing to a stranger
         await users.RecordLoginSuccessAsync(user.Id);
         await AuthSession.SignInAsync(ctx, user);
         return Results.Ok(new { user = user.ToDto() });
