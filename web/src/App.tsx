@@ -2,6 +2,7 @@ import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { useEffect, useState, type ReactNode } from "react";
 import { api, errorMessage } from "./api";
 import { useConfig } from "./config";
+import { PlacePicker } from "./place";
 import { useAuth } from "./auth";
 import Alerts from "./pages/Alerts";
 import Appointments from "./pages/Appointments";
@@ -32,6 +33,7 @@ function Header() {
   return (
     <header className="topbar">
       <Link to="/" className="brand">Say<span>Serné</span></Link>
+      <PlacePicker />
       <nav>
         <Link to="/search">Search</Link>
         {user ? (

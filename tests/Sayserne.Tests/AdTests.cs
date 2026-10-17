@@ -272,6 +272,11 @@ public class AdTests
         await s.Iso.Db.ExecAsync($"UPDATE ad_batches SET date_from = DATE_SUB(UTC_DATE(), INTERVAL 4 DAY), date_to = DATE_SUB(UTC_DATE(), INTERVAL 1 DAY) WHERE id = {gone}");
         await s.Admin.PutAsync($"/api/admin/ads/{off}", new { title = "Switched off", position = "home_banner", imageFileId = await s.Image(), linkUrl = "https://x.test", isActive = false });
 
+        // the admin list says which ads are running today: exactly those with a paid batch covering today
+        var listed = (await s.Admin.GetAsync("/api/admin/ads")).Body.EnumerateArray().ToDictionary(a => a.GetProperty("title").GetString()!, a => a.GetProperty("runningToday").GetBoolean());
+        Assert.True(listed["Everywhere"] && listed["Lebanon"] && listed["Beirut"] && listed["France"] && listed["Sidebar"], string.Join(", ", listed));
+        Assert.False(listed["Not paid"] || listed["Starts tomorrow"] || listed["Ended yesterday"], string.Join(", ", listed));
+
         Assert.Equal(new[] { "Beirut", "Lebanon", "Everywhere" }, SceneHandle.Titles(await s.Served("home_banner", "LB", "Beirut")));      // city first, then country, then global
         Assert.Equal(new[] { "Beirut", "Lebanon", "Everywhere" }, SceneHandle.Titles(await s.Served("home_banner", "LB", "BEIRUT")));
         Assert.Equal(new[] { "Lebanon", "Everywhere" }, SceneHandle.Titles(await s.Served("home_banner", "LB", "Jounieh")));

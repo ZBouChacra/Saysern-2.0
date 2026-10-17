@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, errorMessage, type Eligible, type ProfessionalPage, type ReviewItem } from "../api";
 import { useAuth } from "../auth";
+import { AdSlot } from "../AdSlot";
 import { Avatar, Stars, fullName, money, useWeekdays, when } from "../components";
 import { useLookup } from "../config";
 
@@ -89,6 +90,7 @@ export default function Professional() {
           <div className="muted small">{when(r.createdAt)}</div>
         </div>
       ))}
+      <AdSlot position="sidebar" />
     </main>
   );
 }

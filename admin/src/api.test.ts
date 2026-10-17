@@ -94,3 +94,43 @@ describe("email administration", () => {
     expect(JSON.parse((test.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ to: "x@example.com" });
   });
 });
+
+describe("ads administration", () => {
+  it("uploads a picture as multipart with the admin CSRF header and no hand-made content type", async () => {
+    const fn = mockFetch(201, { id: "a".repeat(32), url: "/api/files/" + "a".repeat(32) });
+    const out = await api.uploadAdImage(new File([new Uint8Array([0xff, 0xd8, 0xff])], "banner.jpg", { type: "image/jpeg" }));
+    const [url, init] = fn.mock.calls[0] as unknown as [string, RequestInit];
+    expect([url, init.method]).toEqual(["/api/admin/ads/images", "POST"]);
+    expect((init.headers as Record<string, string>)["X-Requested-With"]).toBe("sayserne-admin");
+    expect(Object.keys(init.headers as Record<string, string>)).not.toContain("Content-Type");
+    expect((init.body as FormData).get("file")).toBeInstanceOf(File);
+    expect(out.id).toHaveLength(32);
+  });
+  it("creates or updates an ad depending on whether it has an id", async () => {
+    const body = { title: "A", position: "sidebar", imageFileId: "x".repeat(32), linkUrl: "https://x.test", isActive: true };
+    const created = mockFetch(201, { id: 1 });
+    await api.saveAd(null, body);
+    expect(((created.mock.calls[0] as unknown as [string, RequestInit])[1]).method).toBe("POST");
+    const updated = mockFetch(200, { id: 1 });
+    await api.saveAd(7, body);
+    const [url, init] = updated.mock.calls[0] as unknown as [string, RequestInit];
+    expect([url, init.method]).toEqual(["/api/admin/ads/7", "PUT"]);
+  });
+  it("books days, moves a batch, previews capacity and reads prices with the right addresses", async () => {
+    const book = mockFetch(201, { id: 3 });
+    await api.createAdBatch(5, "2026-11-01", "2026-11-03");
+    expect([(book.mock.calls[0] as unknown as [string])[0], JSON.parse((book.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)]).toEqual(["/api/admin/ads/5/batches", { from: "2026-11-01", to: "2026-11-03" }]);
+    const pay = mockFetch(200, { id: 3 });
+    await api.setAdBatchStatus(3, "paid");
+    expect([(pay.mock.calls[0] as unknown as [string])[0], JSON.parse((pay.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)]).toEqual(["/api/admin/ads/batches/3/status", { status: "paid" }]);
+    const cap = mockFetch(200, []);
+    await api.adCapacity(5, "2026-11-01", "2026-11-03");
+    expect((cap.mock.calls[0] as unknown as [string])[0]).toBe("/api/admin/ads/5/capacity?from=2026-11-01&to=2026-11-03");
+    const price = mockFetch(200, { dailyFee: 5, maxAds: 5 });
+    await api.resolveAdPricing("home_banner", "LB", "Beirut");
+    expect((price.mock.calls[0] as unknown as [string])[0]).toBe("/api/admin/ads/pricing/resolve?position=home_banner&country=LB&city=Beirut");
+    const del = mockFetch(204);
+    await api.deleteAdPricing(9);
+    expect([(del.mock.calls[0] as unknown as [string])[0], ((del.mock.calls[0] as unknown as [string, RequestInit])[1]).method]).toEqual(["/api/admin/ads/pricing/9", "DELETE"]);
+  });
+});

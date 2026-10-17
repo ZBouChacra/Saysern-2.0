@@ -1,3 +1,4 @@
+import { AdSlot } from "../AdSlot";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { LookupSelect } from "../components";
@@ -41,6 +42,7 @@ export default function Search() {
   const pages = result ? Math.max(1, Math.ceil(result.total / result.pageSize)) : 1;
   return (
     <main className="card wide">
+      <AdSlot position="search_banner" />
       <h1>Find a professional</h1>
       <form onSubmit={submit} className="filters">
         <label>Category
@@ -76,7 +78,10 @@ export default function Search() {
             {user && <button className="btn small secondary" onClick={() => void saveAlert()}>Save this search</button>}
           </p>
           {saved && <p className="muted">{saved}</p>}
-          <div className="list">{result.items.map(l => <ListingCard key={l.professionId} l={l} />)}</div>
+          <div className="with-sidebar">
+            <div className="list">{result.items.map(l => <ListingCard key={l.professionId} l={l} />)}</div>
+            <AdSlot position="sidebar" />
+          </div>
           {result.items.length === 0 && <p className="muted">No professionals match. Try removing a filter.</p>}
           {!user && result.total > 0 && <p className="muted"><Link to="/login">Sign in</Link> to book, message or save this search.</p>}
           <p className="row spread">

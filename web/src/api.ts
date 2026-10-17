@@ -126,6 +126,7 @@ export interface ChatRoomSummary {
 }
 export interface ChatMessage { id: number; roomId: number; senderId: number; messageType: "text" | "location" | "image" | "video"; content?: string; latitude?: number; longitude?: number; fileId?: string; isRead: boolean; createdAt: string }
 
+export interface ServedAd { id: number; title: string; position: string; imageUrl: string; clickUrl: string }
 export interface NotificationPref { event: string; channel: string; enabled: boolean }
 
 export type UploadPurpose = "profile_photo" | "banner_photo" | "chat_media";
@@ -193,6 +194,9 @@ export const api = {
   resetPassword: (token: string, password: string) => request<{ reset: boolean }>("POST", "/auth/reset-password", { token, password }),
   notificationPrefs: () => request<NotificationPref[]>("GET", "/me/notifications"),
   setNotificationPref: (event: string, channel: string, enabled: boolean) => request<NotificationPref[]>("PUT", "/me/notifications", { event, channel, enabled }),
+  ads: (position: string, country?: string, city?: string) => request<ServedAd[]>("GET", `/ads?position=${encodeURIComponent(position)}${country ? `&country=${encodeURIComponent(country)}` : ""}${city ? `&city=${encodeURIComponent(city)}` : ""}`),
+  /** Fire and forget: failing to count an impression must never disturb the page. */
+  adImpression: (id: number): void => { void fetch(`/api/ads/${id}/impression`, { method: "POST", credentials: "same-origin", keepalive: true, headers: { "X-Requested-With": "sayserne-web" } }).catch(() => undefined); },
   uploadFile: upload,
   fileStatus: (id: string) => request<FileStatus>("GET", `/files/${id}/status`),
   rooms: () => request<ChatRoomSummary[]>("GET", "/chat/rooms"),

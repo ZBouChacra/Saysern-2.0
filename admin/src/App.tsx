@@ -4,6 +4,8 @@ import { useSession } from "./session";
 import Audit from "./pages/Audit";
 import Catalog from "./pages/Catalog";
 import Login from "./pages/Login";
+import AdPrices from "./pages/AdPrices";
+import Ads from "./pages/Ads";
 import Jobs from "./pages/Jobs";
 import Outbox from "./pages/Outbox";
 import Lookups from "./pages/Lookups";
@@ -20,6 +22,8 @@ const NAV: { to: string; label: string; perm?: string }[] = [
   { to: "/lookups", label: "Lookups", perm: "lookups.manage" },
   { to: "/translations", label: "Texts", perm: "translations.manage" },
   { to: "/catalog", label: "Catalog", perm: "catalog.manage" },
+  { to: "/ads", label: "Ads", perm: "ads.read" },
+  { to: "/ad-prices", label: "Ad prices", perm: "ads.read" },
   { to: "/jobs", label: "Background jobs", perm: "jobs.read" },
   { to: "/outbox", label: "Email log", perm: "email.read" },
   { to: "/audit", label: "Audit log", perm: "audit.read" },
@@ -65,6 +69,8 @@ export default function App() {
             <Route path="/translations" element={<Guard perm="translations.manage"><Translations /></Guard>} />
             <Route path="/catalog" element={<Guard perm="catalog.manage"><Catalog /></Guard>} />
             <Route path="/outbox" element={<Guard perm="email.read"><Outbox /></Guard>} />
+            <Route path="/ads" element={<Guard perm="ads.read"><Ads /></Guard>} />
+            <Route path="/ad-prices" element={<Guard perm="ads.read"><AdPrices /></Guard>} />
             <Route path="/jobs" element={<Guard perm="jobs.read"><Jobs /></Guard>} />
             <Route path="/audit" element={<Guard perm="audit.read"><Audit /></Guard>} />
             <Route path="/security" element={<Security />} />

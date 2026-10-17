@@ -222,3 +222,25 @@ describe("account email calls", () => {
     expect(errorMessage(err)).toContain("expired");
   });
 });
+
+describe("ads", () => {
+  it("asks for the ads of a position and the visitor's place, encoding what it sends", async () => {
+    const fn = mockFetch(200, [{ id: 1, title: "A", position: "sidebar", imageUrl: "/api/files/x", clickUrl: "/api/ads/1/click" }]);
+    const ads = await api.ads("sidebar", "LB", "Jbeil & Co");
+    expect((fn.mock.calls[0] as unknown as [string])[0]).toBe("/api/ads?position=sidebar&country=LB&city=Jbeil%20%26%20Co");
+    expect(ads[0].clickUrl).toBe("/api/ads/1/click");
+    const bare = mockFetch(200, []);
+    await api.ads("home_banner");
+    expect((bare.mock.calls[0] as unknown as [string])[0]).toBe("/api/ads?position=home_banner");   // no place known: nothing extra is sent
+  });
+  it("reports an impression without waiting and never throws, even when the network fails", async () => {
+    const fn = mockFetch(204);
+    api.adImpression(7);
+    const [url, init] = fn.mock.calls[0] as unknown as [string, RequestInit];
+    expect([url, init.method, init.keepalive]).toEqual(["/api/ads/7/impression", "POST", true]);
+    expect((init.headers as Record<string, string>)["X-Requested-With"]).toBe("sayserne-web");
+    vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("offline"))));
+    expect(() => api.adImpression(8)).not.toThrow();
+    await Promise.resolve();   // the rejected promise is swallowed (an unhandled rejection would fail the run)
+  });
+});

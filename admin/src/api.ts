@@ -43,9 +43,27 @@ export interface Category { id: number; name: string; nameAr?: string; descripti
 export interface Service { id: number; categoryId: number; name: string; nameAr?: string; description?: string; descriptionAr?: string; isBlocked: boolean }
 export interface AuditRow { id: number; occurredAt: string; actorId?: number; actorName?: string; action: string; entityType: string; entityId?: string; summary: string; details?: unknown; ip?: string }
 export interface OutboxRow { id: number; userId?: number; to: string; eventCode: string; language: string; subject: string; status: "queued" | "sent" | "failed" | "skipped"; attempts: number; lastError?: string; createdAt: string; sentAt?: string }
+export interface Ad { id: number; title: string; position: string; imageFileId: string; linkUrl: string; countryCode?: string; city?: string; isActive: boolean; feeOverride?: number; createdAt: string; runningToday: boolean }
+export interface AdInput { title: string; position: string; imageFileId: string; linkUrl: string; countryCode?: string; city?: string; isActive: boolean; feeOverride?: number }
+export interface AdBatch { id: number; adId: number; dateFrom: string; dateTo: string; feePerDay: number; totalFee: number; status: "pending" | "paid" | "cancelled"; createdAt: string; paidAt?: string }
+export interface AdPricing { id: number; position: string; countryCode?: string; city?: string; dailyFee?: number; maxAds?: number }
+export interface ResolvedPricing { dailyFee: number; maxAds: number }
+export interface AdStat { adId: number; title: string; position: string; impressions: number; uniqueImpressions: number; clicks: number; uniqueClicks: number }
+export interface CapacityDay { day: string; booked: number; maxAds: number }
 export interface JobRow { id: number; type: string; payload?: unknown; status: "pending" | "running" | "done" | "failed"; attempts: number; maxAttempts: number; runAt: string; lastError?: string; createdAt: string; finishedAt?: string }
 export interface JobStat { type: string; status: string; count: number }
 export interface AuditFilter { from?: string; to?: string; actorId?: string; action?: string; entityType?: string; search?: string; page?: number; pageSize?: number }
+
+/** Uploads an ad's picture (multipart). The server decides what the file really is, shrinks it and strips its metadata. */
+async function uploadAdImage(file: File): Promise<{ id: string; url: string }> {
+  const form = new FormData();
+  form.append("file", file, file.name);
+  const response = await fetch("/api/admin/ads/images", { method: "POST", credentials: "same-origin", headers: { "X-Requested-With": "sayserne-admin" }, body: form });
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : undefined;
+  if (!response.ok) throw new ApiError(response.status, data?.error ?? (response.status === 413 ? "FILE_TOO_LARGE" : "UNKNOWN"), data?.errors);
+  return data as { id: string; url: string };
+}
 
 export const api = {
   // sign-in (password -> authenticator code or recovery code; first sign-in enrolls)
@@ -89,6 +107,18 @@ export const api = {
   saveCategory: (id: number | null, c: Omit<Category, "id">) => id === null ? request<Category>("POST", "/admin/catalog/categories", c) : request<Category>("PUT", `/admin/catalog/categories/${id}`, c),
   saveService: (id: number | null, s: Omit<Service, "id">) => id === null ? request<Service>("POST", "/admin/catalog/services", s) : request<Service>("PUT", `/admin/catalog/services/${id}`, s),
 
+  ads: (position?: string) => request<Ad[]>("GET", `/admin/ads${q({ position })}`),
+  saveAd: (id: number | null, body: AdInput) => (id === null ? request<Ad>("POST", "/admin/ads", body) : request<Ad>("PUT", `/admin/ads/${id}`, body)),
+  uploadAdImage,
+  adBatches: (adId?: number) => request<AdBatch[]>("GET", `/admin/ads/batches${q({ adId })}`),
+  createAdBatch: (adId: number, from: string, to: string) => request<AdBatch>("POST", `/admin/ads/${adId}/batches`, { from, to }),
+  setAdBatchStatus: (id: number, status: "paid" | "cancelled") => request<AdBatch>("POST", `/admin/ads/batches/${id}/status`, { status }),
+  adCapacity: (adId: number, from: string, to: string) => request<CapacityDay[]>("GET", `/admin/ads/${adId}/capacity${q({ from, to })}`),
+  adPricing: () => request<AdPricing[]>("GET", "/admin/ads/pricing"),
+  saveAdPricing: (b: { position: string; countryCode?: string; city?: string; dailyFee?: number; maxAds?: number }) => request<AdPricing>("PUT", "/admin/ads/pricing", b),
+  deleteAdPricing: (id: number) => request<void>("DELETE", `/admin/ads/pricing/${id}`),
+  resolveAdPricing: (position: string, country?: string, city?: string) => request<ResolvedPricing>("GET", `/admin/ads/pricing/resolve${q({ position, country, city })}`),
+  adStats: (from?: string, to?: string) => request<AdStat[]>("GET", `/admin/ads/stats${q({ from, to })}`),
   emailOutbox: (status: string, page: number) => request<Paged<OutboxRow>>("GET", `/admin/email/outbox${q({ status, page, pageSize: 25 })}`),
   sendTestEmail: (to: string) => request<{ sent: boolean }>("POST", "/admin/email/test", { to }),
   jobs: (status: string, type: string, page: number) => request<Paged<JobRow>>("GET", `/admin/jobs${q({ status, type, page, pageSize: 25 })}`),

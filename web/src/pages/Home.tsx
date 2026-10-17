@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, googleLinkUrl, type Listing } from "../api";
 import { useAuth } from "../auth";
+import { AdSlot } from "../AdSlot";
 import { ListingCard } from "../components";
 
 export default function Home() {
@@ -19,6 +20,7 @@ export default function Home() {
 
   return (
     <main className="card wide">
+      <AdSlot position="home_banner" />
       <h1>Find the right professional for every need</h1>
       <form className="row hero" onSubmit={submit}>
         <input value={city} onChange={e => setCity(e.target.value)} placeholder="City (optional)" aria-label="City" />
