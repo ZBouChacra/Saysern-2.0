@@ -14,6 +14,7 @@ using Sayserne.Api.Endpoints;
 using Sayserne.Api.Email;
 using Sayserne.Api.Infrastructure;
 using Sayserne.Api.Ads;
+using Sayserne.Api.Contact;
 using Sayserne.Api.Jobs;
 using Sayserne.Api.Moderation;
 using Sayserne.Api.Payments;
@@ -64,6 +65,7 @@ namespace Sayserne.Api
             builder.Services.AddSingleton<MarketplaceNotifier>();
             builder.Services.AddSingleton<IJobHandler, EmailSendJobHandler>();
             builder.Services.AddSingleton<IJobHandler, MessageNotificationJobHandler>();
+            builder.Services.AddSingleton<IContactRepository, ContactRepository>();
             builder.Services.AddSingleton<IModerationRepository, ModerationRepository>();
             builder.Services.AddSingleton<IPaymentRepository, PaymentRepository>();
             builder.Services.AddSingleton<IPremiumRepository, PremiumRepository>();
@@ -148,6 +150,12 @@ namespace Sayserne.Api
                         _ => new FixedWindowRateLimiterOptions { PermitLimit = settings.GetInt("Auth.AuthRequestsPerMinute"), Window = TimeSpan.FromMinutes(1), QueueLimit = 0 });
                 });
                 // writes (profile edits, bookings, chat messages, alerts): limited per signed-in user, falling back to the client IP
+                o.AddPolicy(ContactEndpoints.Limiter, ctx =>
+                {
+                    var settings = ctx.RequestServices.GetRequiredService<ISettingsService>();
+                    return RateLimitPartition.GetFixedWindowLimiter($"contact|{ctx.Connection.RemoteIpAddress}|{settings.Version}",
+                        _ => new FixedWindowRateLimiterOptions { PermitLimit = settings.GetInt("Contact.MessagesPerHour"), Window = TimeSpan.FromHours(1), QueueLimit = 0 });
+                });
                 o.AddPolicy(AdEndpoints.EventLimiter, ctx =>
                 {
                     var settings = ctx.RequestServices.GetRequiredService<ISettingsService>();
@@ -194,6 +202,8 @@ namespace Sayserne.Api
             app.MapPremium();
             app.MapPayments();
             app.MapModeration();
+            app.MapContact();
+            app.MapDashboard();
             app.MapMarketplace();
             app.MapPublicConfig();
             app.MapFiles();

@@ -189,6 +189,9 @@ public interface INotifier
 {
     /// <summary>Queues an e-mail about an event if the user wants it (and e-mail is switched on). Never throws: a notification must not break the action that caused it.</summary>
     Task NotifyAsync(string eventCode, long userId, IReadOnlyDictionary<string, string> data, CancellationToken ct = default);
+
+    /// <summary>Queues an e-mail to a plain address (not an account): a reply to a contact message, or a heads-up to staff. Returns false if e-mail is off or it could not be queued.</summary>
+    Task<bool> NotifyAddressAsync(string eventCode, string toAddress, string language, IReadOnlyDictionary<string, string> data, CancellationToken ct = default);
 }
 
 public sealed class Notifier(IEmailRepository repo, IEmailRenderer renderer, IJobQueue jobs, ISettingsService settings, ILogger<Notifier> log) : INotifier
@@ -208,6 +211,23 @@ public sealed class Notifier(IEmailRepository repo, IEmailRenderer renderer, IJo
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             log.LogWarning(ex, "Could not queue the {Event} e-mail for user {UserId}.", eventCode, userId);
+        }
+    }
+
+    public async Task<bool> NotifyAddressAsync(string eventCode, string toAddress, string language, IReadOnlyDictionary<string, string> data, CancellationToken ct = default)
+    {
+        if (settings.GetString("Email.Provider") == "off") return false;
+        try
+        {
+            var mail = await renderer.RenderAsync(eventCode, language, data, ct);
+            var id = await repo.CreateOutboxAsync(null, toAddress, eventCode, language, mail, ct);
+            await jobs.EnqueueAsync(EmailSendJobHandler.JobType, new { outboxId = id }, ct: ct);
+            return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            log.LogWarning(ex, "Could not queue the {Event} e-mail to {Address}.", eventCode, toAddress);
+            return false;
         }
     }
 }

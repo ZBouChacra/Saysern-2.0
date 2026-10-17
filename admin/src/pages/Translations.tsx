@@ -34,7 +34,7 @@ export default function Translations() {
           <tr key={k}><td><code>{k}</code></td>
             {languages.map(l => { const row = byKey.get(k)?.get(l); const id = `${l}|${k}`; const val = edits[id] ?? row?.value ?? "";
               return (<td key={l}>
-                <textarea rows={2} dir={l === "ar" ? "rtl" : "ltr"} aria-label={`${k} ${l}`} value={val} onChange={e => setEdits({ ...edits, [id]: e.target.value })} />
+                <textarea rows={Math.min(Math.max(2, val.split("\n").length + 1), 18)} dir={l === "ar" ? "rtl" : "ltr"} aria-label={`${k} ${l}`} value={val} onChange={e => setEdits({ ...edits, [id]: e.target.value })} />
                 <div className="row">{edits[id] !== undefined && edits[id] !== row?.value && <button className="btn small" onClick={() => void save(l, k, false)}>Save</button>}
                   {row && row.value !== row.defaultValue && <button className="btn small secondary" onClick={() => void save(l, k, true)}>Reset</button>}</div>
               </td>); })}

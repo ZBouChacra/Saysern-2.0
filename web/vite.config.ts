@@ -9,5 +9,5 @@ export default defineConfig({
   plugins: [react()],
   server: { port: 5173, strictPort: true, proxy: { "/api": { target: api, changeOrigin: false } } },
   preview: { port: 5173, strictPort: true, proxy: { "/api": { target: api, changeOrigin: false } } },
-  test: { environment: "node", include: ["src/**/*.test.ts"] },
+  test: { environment: "node", include: ["src/**/*.test.{ts,tsx}"] },
 });

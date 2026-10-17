@@ -81,3 +81,8 @@ pre.json { background: var(--bg); padding: .5rem; border-radius: 8px; overflow: 
 /* conversation moderation */
 .thread-admin { display: flex; flex-direction: column; gap: .5rem; margin: .8rem 0; max-height: 420px; overflow: auto; } .thread-admin .msg { border: 1px solid var(--line); border-radius: 8px; padding: .5rem .7rem; }
 .thread-admin .msg.staff { background: #fff4d6; border-color: #ecd9a0; color: #4a3800; } .thread-admin .msg.deleted { border-style: dashed; } .struck { text-decoration: line-through; opacity: .75; }
+
+/* dashboard */
+.dashboard { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .9rem; margin: 1rem 0; }
+.tile { display: block; border: 1px solid var(--line); border-radius: 10px; padding: .9rem 1rem; text-decoration: none; color: inherit; background: var(--card, #fff); } a.tile:hover { border-color: var(--accent, #1f6f5c); }
+.tile-value { font: 700 1.8rem Georgia, serif; } .tile-label { font-weight: 600; } .tile.alert { border-color: #c0392b; background: rgba(192,57,43,.06); } ul.plain { list-style: none; padding: 0; } ul.plain li { padding: .25rem 0; }

@@ -64,6 +64,18 @@ export interface AdminReview { id: number; rating: number; comment?: string; cre
 export interface AdminChatRoom { id: number; userAId: number; userAName: string; userAEmail: string; userBId: number; userBName: string; userBEmail: string; createdAt: string; lastMessageAt: string; messageCount: number; deletedMessages: number; staffMessages: number; deletedByAAt?: string; deletedByBAt?: string }
 export interface AdminChatMessage { id: number; roomId: number; senderId: number; senderName: string; messageType: string; content?: string; latitude?: number; longitude?: number; fileId?: string; isRead: boolean; isStaff: boolean; createdAt: string; deletedAt?: string; deletedBy?: number; deletedByName?: string }
 export interface AdminChatThread { room: { id: number; userAId: number; userAName: string; userBId: number; userBName: string }; messages: AdminChatMessage[] }
+export interface ContactRow { id: number; userId?: number; name: string; email: string; language: string; topic?: string; subject: string; preview: string; status: "new" | "in_progress" | "replied" | "archived" | "spam"; createdAt: string; repliedAt?: string }
+export interface ContactMessage { id: number; userId?: number; name: string; email: string; language: string; topic?: string; topicName?: string; subject: string; body: string; status: ContactRow["status"]; replyBody?: string; repliedAt?: string; repliedByName?: string; internalNote?: string; createdAt: string }
+export interface Dashboard {
+  users?: { total: number; last7Days: number; last30Days: number; professionals: number; listings: number; locked: number; appointments: { pending: number; approved: number; completed: number; cancelled: number } };
+  reviews?: { total: number; hidden: number; average: number };
+  contact?: { unanswered: number; total: number };
+  ads?: { runningToday: number; pendingBatches: number };
+  premium?: { activeToday: number; pendingBatches: number };
+  payments?: { receiptsLast30Days: number; receivedLast30Days: number; receivedThisMonth: number; voidLast30Days: number; currency: string };
+  system?: { failedJobs?: number; pendingJobs?: number; failedEmails?: number; queuedEmails?: number };
+  recentActivity?: { id: number; occurredAt: string; actorName?: string; action: string; summary: string }[];
+}
 export interface JobRow { id: number; type: string; payload?: unknown; status: "pending" | "running" | "done" | "failed"; attempts: number; maxAttempts: number; runAt: string; lastError?: string; createdAt: string; finishedAt?: string }
 export interface JobStat { type: string; status: string; count: number }
 export interface AuditFilter { from?: string; to?: string; actorId?: string; action?: string; entityType?: string; search?: string; page?: number; pageSize?: number }
@@ -152,6 +164,11 @@ export const api = {
   adminChats: (filter: string, search: string, page: number) => request<Paged<AdminChatRoom>>("GET", `/admin/chats${q({ filter, search, page, pageSize: 25 })}`),
   readChat: (roomId: number) => request<AdminChatThread>("GET", `/admin/chats/${roomId}/messages`),
   postStaffMessage: (roomId: number, content: string) => request<AdminChatMessage>("POST", `/admin/chats/${roomId}/messages`, { content }),
+  contactList: (status: string, search: string, page: number) => request<Paged<ContactRow>>("GET", `/admin/contact${q({ status, search, page, pageSize: 25 })}`),
+  contactGet: (id: number) => request<ContactMessage>("GET", `/admin/contact/${id}`),
+  contactReply: (id: number, body: string) => request<ContactMessage>("POST", `/admin/contact/${id}/reply`, { body }),
+  contactStatus: (id: number, status: string, note?: string) => request<ContactMessage>("POST", `/admin/contact/${id}/status`, { status, note }),
+  dashboard: () => request<Dashboard>("GET", "/admin/dashboard"),
   emailOutbox: (status: string, page: number) => request<Paged<OutboxRow>>("GET", `/admin/email/outbox${q({ status, page, pageSize: 25 })}`),
   sendTestEmail: (to: string) => request<{ sent: boolean }>("POST", "/admin/email/test", { to }),
   jobs: (status: string, type: string, page: number) => request<Paged<JobRow>>("GET", `/admin/jobs${q({ status, type, page, pageSize: 25 })}`),

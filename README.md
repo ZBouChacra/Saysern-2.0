@@ -16,8 +16,8 @@ Staff    ──▶ admin/ ─/api──┘      │  cookie sessions (separate f
  (password + authenticator)       └─ Google OIDC (public site only)
 ```
 
-> **Status: phases 1, 2, 3a and 3b done; 3c started (review answers and moderation, chat deletion and moderation are built)**: files and media, background jobs, e-mail, saved-search digests, advertising, premium listings, and fees with manual payments and printable receipts, all with their screens. Foundation and authentication (1), the core marketplace (2), and the **configuration platform** (3a): runtime settings, lookups, translated texts, audit log, roles and permissions, two-factor back-office sign-in, user/catalog management — in a separate admin app.
-> Not built yet: contact messages, review and chat moderation, dashboard, About/Contact/legal content (3c); the full Arabic and right-to-left screens, theme and the user Settings page, per-user time zones, marketing sections, account disabling (4). The mobile app comes after the web application.
+> **Status: phases 1, 2, 3a, 3b and 3c done**: files and media, background jobs, e-mail, saved-search digests, advertising, premium listings, and fees with manual payments and printable receipts, all with their screens. Foundation and authentication (1), the core marketplace (2), and the **configuration platform** (3a): runtime settings, lookups, translated texts, audit log, roles and permissions, two-factor back-office sign-in, user/catalog management — in a separate admin app.
+> Not built yet: the full Arabic and right-to-left screens, theme and the user Settings page, per-user time zones, marketing sections, account disabling (4). The mobile app comes after the web application.
 
 ---
 
@@ -366,6 +366,16 @@ There is no payment gateway yet: staff **record the money they received** and th
 **Deleting in chat.** A person can **delete their own messages** (for everyone: both people then see only "This message was deleted", never the text; a deleted picture or video can no longer be fetched by either of them) and can **delete a conversation**: it disappears from their list and their history is cleared, **for them only**; the other person keeps theirs. If something newer arrives (or they open the chat again) it comes back showing only what is newer. Staff messages cannot be deleted by users.
 
 **Moderation of conversations** (`chats.read` / `chats.post`). Staff can list every conversation (filter "with deletions", search by name or e-mail), and open one to read it **including deleted messages, who deleted them and when**, plus pictures and videos. **Every reading is recorded in the audit log** (who, which conversation, when). With `chats.post` staff can **write in a conversation as the SaySerné team**: both people see it highlighted, are e-mailed (this notification cannot be switched off), and it brings the conversation back for anyone who had deleted it. Team messages never count as "unread". Everything staff do here is audited in the same database transaction.
+
+## Contact, content pages and the dashboard (phase 3c, part 2)
+
+**Contact messages.** The public *Contact* page (footer link) takes a name, an e-mail address, an optional topic (a lookup), a subject and a message, in the visitor's language (`Contact.MaxMessageLength`). Signed-in visitors are recognised (the message is linked to their account). Protection: a hidden **trap field** that people never fill in (a message that fills it is kept but marked *spam*, and the sender is told "received" like everyone else, so a bot learns nothing), and an **hourly limit per address** (`Contact.MessagesPerHour`, which also counts refused attempts). Optionally set `Contact.NotifyAddress` to be e-mailed when a real message arrives.
+
+**The inbox** (*Contact messages*, `contact.read` / `contact.manage`) lists messages, unanswered first, with filters by status (new, in progress, replied, archived, spam) and search. Opening one shows who wrote it, in which language and about what. **Replying sends an e-mail to the address the person typed**, in the language they wrote in (the templates are in Texts, `email.contact_reply.*`), including their original message; the reply is recorded only after the e-mail was queued, and replying is refused while e-mail is switched off, so nobody is told a reply was sent when it was not. Staff can also set a status and an internal note (not sent). Everything is audited.
+
+**Content pages.** *About*, *Terms of use* and *Privacy policy* are ordinary texts (Texts screen, keys `page.<name>.title` / `.body`, English and Arabic), shown at `/about`, `/terms`, `/privacy` and linked from the footer. A body is plain text: a blank line starts a paragraph, a line starting with `# ` is a heading, lines starting with `- ` make a list; nothing typed is ever treated as HTML. **The Terms and the Privacy policy shipped here are drafts written to describe how the service actually works. Have a lawyer review and adapt them before launch.**
+
+**Dashboard.** The back-office home page shows headline numbers, each group only to staff whose role may see that area: unanswered messages, users and appointments, reviews, ads running and premium listings today, money received this month and in 30 days, failed jobs and e-mails, and recent activity. A staff member with no relevant permission simply sees an empty page.
 
 ## Configuration reference
 

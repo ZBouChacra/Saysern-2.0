@@ -219,3 +219,22 @@ describe("moderation", () => {
     expect([(post.mock.calls[0] as unknown as [string])[0], JSON.parse((post.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)]).toEqual(["/api/admin/chats/12/messages", { content: "Please be polite" }]);
   });
 });
+
+describe("contact inbox and dashboard", () => {
+  it("lists, opens, replies and changes status with the right addresses", async () => {
+    const list = mockFetch(200, { items: [], total: 0, page: 1, pageSize: 25 });
+    await api.contactList("new", "mona & co", 1);
+    expect((list.mock.calls[0] as unknown as [string])[0]).toBe("/api/admin/contact?status=new&search=mona+%26+co&page=1&pageSize=25");
+    const reply = mockFetch(200, { id: 3 });
+    await api.contactReply(3, "Thanks");
+    expect([(reply.mock.calls[0] as unknown as [string])[0], JSON.parse((reply.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)]).toEqual(["/api/admin/contact/3/reply", { body: "Thanks" }]);
+    const st = mockFetch(200, { id: 3 });
+    await api.contactStatus(3, "archived", "done");
+    expect(JSON.parse((st.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ status: "archived", note: "done" });
+  });
+  it("reads the dashboard", async () => {
+    const fn = mockFetch(200, { contact: { unanswered: 2, total: 5 } });
+    expect((await api.dashboard()).contact?.unanswered).toBe(2);
+    expect((fn.mock.calls[0] as unknown as [string])[0]).toBe("/api/admin/dashboard");
+  });
+});

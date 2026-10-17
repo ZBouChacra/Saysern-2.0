@@ -275,3 +275,19 @@ describe("review answers and chat deletion", () => {
     expect([(room.mock.calls[0] as unknown as [string])[0], (room.mock.calls[0] as unknown as [string, RequestInit])[1].method]).toEqual(["/api/chat/rooms/4", "DELETE"]);
   });
 });
+
+describe("contact form", () => {
+  it("posts the message, the language and the hidden trap field as they are", async () => {
+    const fn = mockFetch(202, { received: true });
+    await api.contact({ name: "Mona", email: "mona@example.test", subject: "Hello", message: "Hi", language: "ar", website: "" });
+    const [url, init] = fn.mock.calls[0] as unknown as [string, RequestInit];
+    expect([url, init.method]).toEqual(["/api/contact", "POST"]);
+    expect(JSON.parse(init.body as string)).toEqual({ name: "Mona", email: "mona@example.test", subject: "Hello", message: "Hi", language: "ar", website: "" });
+  });
+  it("shows the field messages from a refused form", async () => {
+    mockFetch(400, { error: "VALIDATION_FAILED", errors: { email: "Please enter a valid email address." } });
+    const err = await api.contact({ name: "A", email: "x", subject: "s", message: "m" }).catch(e => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.fieldErrors.email).toContain("valid");
+  });
+});

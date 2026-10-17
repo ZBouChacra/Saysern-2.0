@@ -83,3 +83,8 @@ label.check { display: flex; align-items: center; gap: .4rem; font-weight: 500; 
 .bubble.staff { background: #fff4d6; color: #4a3800; border: 1px solid #ecd9a0; align-self: center; max-width: 90%; } .staff-label { font-weight: 700; font-size: .75rem; letter-spacing: .03em; text-transform: uppercase; margin-bottom: .2rem; }
 .bubble.deleted { background: transparent; border: 1px dashed var(--line); } .no-pad { padding: 0; }
 @media (prefers-color-scheme: dark) { .bubble.staff { background: #3b3216; color: #f1deaa; border-color: #5a4a1d; } }
+
+/* contact, content pages, footer */
+.hp { position: absolute; inset-inline-start: -10000px; width: 1px; height: 1px; overflow: hidden; }
+.content-page h2 { margin-top: 1.4rem; } .content-page p, .content-page li { line-height: 1.65; max-width: 70ch; }
+.site-footer { margin-top: 2rem; padding: 1.2rem; border-top: 1px solid var(--line); text-align: center; } .site-footer nav { display: flex; gap: 1.2rem; justify-content: center; flex-wrap: wrap; }

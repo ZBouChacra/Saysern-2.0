@@ -201,6 +201,8 @@ export const api = {
   adImpression: (id: number): void => { void fetch(`/api/ads/${id}/impression`, { method: "POST", credentials: "same-origin", keepalive: true, headers: { "X-Requested-With": "sayserne-web" } }).catch(() => undefined); },
   uploadFile: upload,
   fileStatus: (id: string) => request<FileStatus>("GET", `/files/${id}/status`),
+  /** The public contact form. `website` is a hidden trap field that real people never fill in. */
+  contact: (b: { name: string; email: string; topic?: string; subject: string; message: string; language?: string; website?: string }) => request<{ received: boolean }>("POST", "/contact", b),
   replyToReview: (id: number, text: string) => request<ReviewItem>("PUT", `/reviews/${id}/reply`, { text }),
   deleteMessage: (roomId: number, messageId: number) => request<void>("DELETE", `/chat/rooms/${roomId}/messages/${messageId}`),
   deleteRoom: (roomId: number) => request<void>("DELETE", `/chat/rooms/${roomId}`),

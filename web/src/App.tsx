@@ -2,12 +2,15 @@ import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { useEffect, useState, type ReactNode } from "react";
 import { api, errorMessage } from "./api";
 import { useConfig } from "./config";
+import { getText } from "./texts";
 import { PlacePicker } from "./place";
 import { useAuth } from "./auth";
 import Alerts from "./pages/Alerts";
 import Appointments from "./pages/Appointments";
 import Book from "./pages/Book";
 import Chats from "./pages/Chats";
+import Contact from "./pages/Contact";
+import ContentPage from "./pages/ContentPage";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Settings from "./pages/Settings";
@@ -78,6 +81,14 @@ function VerifyBanner() {
   return <div className="notice" role="status">Please confirm your email address to book appointments or send messages. <button className="link" onClick={() => void resend()}>Send me a new link</button>{message && <span> — {message}</span>}</div>;
 }
 
+function Footer() {
+  return (
+    <footer className="site-footer">
+      <nav aria-label="Footer"><Link to="/about">{getText("footer.about") ?? "About"}</Link><Link to="/terms">{getText("footer.terms") ?? "Terms"}</Link><Link to="/privacy">{getText("footer.privacy") ?? "Privacy"}</Link><Link to="/contact">{getText("footer.contact") ?? "Contact"}</Link></nav>
+    </footer>
+  );
+}
+
 export default function App() {
   return (
     <>
@@ -88,6 +99,10 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/link-google" element={<LinkGoogle />} />
+        <Route path="/about" element={<ContentPage page="about" />} />
+        <Route path="/terms" element={<ContentPage page="terms" />} />
+        <Route path="/privacy" element={<ContentPage page="privacy" />} />
+        <Route path="/contact" element={<Contact />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
@@ -102,6 +117,7 @@ export default function App() {
         <Route path="/me" element={<RequireUser><MyProfile /></RequireUser>} />
         <Route path="*" element={<main className="card"><h1>Page not found</h1><Link to="/">Go home</Link></main>} />
       </Routes>
+      <Footer />
     </>
   );
 }
